@@ -1,0 +1,142 @@
+*omarchy-qml-dev.txt*  Omarchy Quattro QML development through Overseer
+
+==============================================================================
+CONTENTS                                            *omarchy-qml-dev-contents*
+
+1. Introduction.............................|omarchy-qml-dev-introduction|
+2. Requirements.............................|omarchy-qml-dev-requirements|
+3. Initialization...........................|omarchy-qml-dev-initialization|
+4. Commands.................................|omarchy-qml-dev-commands|
+5. Mappings.................................|omarchy-qml-dev-mappings|
+6. Configuration............................|omarchy-qml-dev-configuration|
+7. Reload semantics.........................|omarchy-qml-dev-reload|
+8. Troubleshooting..........................|omarchy-qml-dev-troubleshooting|
+
+==============================================================================
+INTRODUCTION                                    *omarchy-qml-dev-introduction*
+
+omarchy-qml-dev.nvim detects schema-version-1 Omarchy shell plugin manifests
+and provides explicit Overseer tasks, native LSP setup, project-local maps,
+and a small dashboard. It stays inactive for unrelated QML projects and never
+runs a project command merely because a buffer opened.
+
+==============================================================================
+REQUIREMENTS                                    *omarchy-qml-dev-requirements*
+
+- Neovim 0.11 or newer
+- stevearc/overseer.nvim
+- omarchy and qmllint for Check
+- journalctl for shell logs
+- qs for shell IPC capability inspection
+- Qt qmlls for LSP features
+
+On Arch: >bash
+  sudo pacman -S qt6-declarative
+<
+The plugin also recognizes the Mason qmlls package.
+
+==============================================================================
+INITIALIZATION                                *omarchy-qml-dev-initialization*
+
+                                                               *:OmaDevInit*
+:OmaDevInit
+    Validate the detected project with the installed Omarchy validator and
+    add the hidden task directory to .gitignore before creating:
+        .omarchy-qml-dev/tasks.json
+
+:OmaDevInit!
+    Explicitly approve replacing an existing tasks.json. Without !, an
+    existing file is preserved and an overwrite choice is shown.
+
+Schema version 1 contains a "tasks" object. Each task contains a non-empty
+"command" argument array and may contain a string "description". Commands
+always run at the detected project root. Shell command strings are invalid.
+The "test" task supplies the Test action. No project-local Lua is loaded.
+
+==============================================================================
+COMMANDS                                            *omarchy-qml-dev-commands*
+
+                                                                   *:OmaDev*
+:OmaDev
+    Open the project dashboard.
+
+                                                               *:OmaDevTest*
+:OmaDevTest
+    Run the project-defined "test" argv. Missing configuration is a non-error
+    explanation that points to initialization.
+
+                                                          *:OmaDevHotReload*
+:OmaDevHotReload
+    Check, stage, validate, and deploy the project. Omarchy's plugin watcher
+    reconstructs the deployed plugin in the running shell.
+
+                                                            *:OmaDevRebuild*
+:OmaDevRebuild
+    Check, run an executable configured test, deploy, then restart the shell
+    exactly once.
+
+                                                             *:OmaDevHealth*
+:OmaDevHealth
+    Run the standard `checkhealth omarchy-qml-dev` report.
+
+==============================================================================
+MAPPINGS                                            *omarchy-qml-dev-mappings*
+
+Defaults exist only in QML buffers inside detected Omarchy projects:
+
+  <C-b>            Check, deploy, and hot reload
+  <C-S-b>          Clean rebuild and restart once
+  <localleader>t   Test
+  <localleader>o   Dashboard
+
+Existing mappings are preserved. The plugin does not change maplocalleader.
+Every mapping is buffer-local and has a human-readable description.
+
+==============================================================================
+CONFIGURATION                                  *omarchy-qml-dev-configuration*
+
+Call setup through a plugin manager's opts or directly: >lua
+  require("omarchy_qml_dev").setup({
+    mappings = {
+      enabled = true,
+      hot_reload = "<C-b>",
+      rebuild = "<C-S-b>",
+      test = false,
+    },
+    executables = {
+      qmllint = "qmllint",
+      qml_language_server = "auto",
+    },
+    restart = { mode = "auto" },
+    notify = true,
+    log_level = vim.log.levels.INFO,
+  })
+<
+Set mappings to false, mappings.enabled to false, or an individual mapping to
+false to disable defaults. Executable names, QML import paths, restart mode,
+notifications, and Overseer task definitions are configurable. Setup and
+commands remain available without mappings.
+
+==============================================================================
+RELOAD SEMANTICS                                      *omarchy-qml-dev-reload*
+
+There is no compile step for ordinary Omarchy QML plugins. The current shell's
+plugin watcher detects deployed files. Omarchy versions using Quickshell
+generation reload replace plugin code in the current process. Older versions
+restart the shell once because their rescan can retain stale IPC handlers.
+
+Clean rebuild uses `omarchy restart shell` once after deployment. Hot reload
+uses shell.rescanPlugins when IPC introspection and the active shell source
+verify generation reload, and otherwise falls back to the full restart.
+mode="soft" refuses to fall back; mode="restart" always performs the full
+restart.
+
+==============================================================================
+TROUBLESHOOTING                              *omarchy-qml-dev-troubleshooting*
+
+Run :OmaDevHealth, or invoke the native command directly: >vim
+  :checkhealth omarchy-qml-dev
+<
+The report checks the Neovim version, Overseer, and the QML language server.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+BLUE=$'\033[1;34m'
+NC=$'\033[0m'
+TERMINAL_WIDTH=120
+
+log_ok() {
+  echo -e "${GREEN}[OK] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
+}
+
+log_info() {
+  echo -e "${BLUE}[INFO] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR] $*${NC}" | fold -s -w "$TERMINAL_WIDTH" >&2
+}
+
+for command in omarchy omarchy-shell; do
+  command -v "$command" >/dev/null 2>&1 || {
+    log_error "$command is not executable"
+    exit 1
+  }
+done
+
+runtime_root=${OMARCHY_PATH:-/usr/share/omarchy}
+runtime_shell="$runtime_root/shell/shell.qml"
+generation_reload_count=0
+if [[ -f $runtime_shell ]]; then
+  generation_reload_count=$(grep -Fc 'Quickshell.reload(false)' "$runtime_shell" || true)
+fi
+
+if (( generation_reload_count >= 2 )); then
+  log_info "Reloading the deployed plugin in the current Quickshell process"
+  if omarchy-shell shell rescanPlugins; then
+    for _ in {1..50}; do
+      if omarchy-shell -q shell ping >/dev/null 2>&1; then
+        log_ok "Hot reload completed"
+        exit 0
+      fi
+      sleep 0.1
+    done
+  fi
+  log_info "Same-process reload did not become ready; restarting the shell once"
+else
+  log_info "This Omarchy version needs one shell restart to replace plugin IPC handlers"
+fi
+
+omarchy restart shell
+log_ok "Reloaded the deployed plugin with one shell restart"

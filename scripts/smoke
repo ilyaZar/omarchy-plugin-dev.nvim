@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+RED=$'\033[0;31m'
+YELLOW=$'\033[0;33m'
+NC=$'\033[0m'
+
+log_error() {
+  printf '%b -> ERROR: %s%b\n' "$RED" "$*" "$NC" >&2
+}
+
+log_warn() {
+  printf '%b -> WARNING: %s%b\n' "$YELLOW" "$*" "$NC" >&2
+}
+
+if (( $# != 2 )); then
+  log_error "Usage: $0 <omarchy-plugin-root> <neovim-init.lua>"
+  exit 2
+fi
+
+project_root=$(realpath "$1")
+nvim_init=$(realpath "$2")
+plugin_root=$(cd "$(dirname "$0")/.." && pwd)
+cache_root=${XDG_CACHE_HOME:-$HOME/.cache}
+mkdir -p "$cache_root"
+smoke_root=$(mktemp -d "$cache_root/omarchy-qml-dev-smoke.XXXXXX")
+
+cleanup() {
+  if command -v gio >/dev/null 2>&1; then
+    if ! gio trash "$smoke_root" >/dev/null 2>&1; then
+      log_warn "Smoke directory remains at $smoke_root"
+    fi
+  else
+    log_warn "Smoke directory remains at $smoke_root"
+  fi
+}
+trap cleanup EXIT
+
+mapfile -t qml_files < <(rg --files "$project_root" -g '*.qml')
+if (( ${#qml_files[@]} == 0 )); then
+  log_error "No QML file found under $project_root"
+  exit 1
+fi
+
+mkdir -p "$smoke_root/unrelated" "$smoke_root/init"
+cp "${qml_files[0]}" "$smoke_root/unrelated/Unrelated.qml"
+rsync -a --exclude=.git/ --exclude=.omarchy-qml-dev/ \
+  "$project_root/" "$smoke_root/init/"
+
+cd "$plugin_root"
+OMARCHY_QML_DEV_SMOKE_ROOT="$project_root" \
+  OMARCHY_QML_DEV_UNRELATED_QML="$smoke_root/unrelated/Unrelated.qml" \
+  OMARCHY_QML_DEV_INIT_ROOT="$smoke_root/init" \
+  "${NVIM:-nvim}" --headless -u "$nvim_init" \
+  -c "lua dofile('tests/smoke_runner.lua')"

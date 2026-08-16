@@ -1,0 +1,121 @@
+#!/bin/bash
+set -euo pipefail
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+BLUE=$'\033[1;34m'
+NC=$'\033[0m'
+TERMINAL_WIDTH=120
+
+log_ok() {
+  echo -e "${GREEN}[OK] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
+}
+
+log_info() {
+  echo -e "${BLUE}[INFO] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR] $*${NC}" | fold -s -w "$TERMINAL_WIDTH" >&2
+}
+
+fail() {
+  log_error "$*"
+  exit 1
+}
+
+usage() {
+  printf 'Usage: %s [--apply|--dry-run] <plugin-root>\n' "$0"
+}
+
+apply=false
+root=""
+
+while (( $# > 0 )); do
+  case "$1" in
+  --apply)
+    apply=true
+    ;;
+  --dry-run)
+    apply=false
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -*)
+    fail "unknown option: $1"
+    ;;
+  *)
+    [[ -z $root ]] || fail "unexpected argument: $1"
+    root="$1"
+    ;;
+  esac
+  shift
+done
+
+[[ -n $root ]] || {
+  usage >&2
+  exit 2
+}
+
+for command in jq omarchy rsync; do
+  command -v "$command" >/dev/null 2>&1 || fail "$command is not executable"
+done
+
+root=$(realpath -- "$root")
+[[ -d $root ]] || fail "plugin root does not exist: $root"
+[[ -f $root/manifest.json ]] || fail "manifest.json is missing from $root"
+
+omarchy plugin validate "$root"
+plugin_id=$(jq -er '.id' "$root/manifest.json") || fail "manifest id is invalid"
+[[ $plugin_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $plugin_id != *..* ]] \
+  || fail "unsafe plugin id: $plugin_id"
+
+plugins_dir=${OMARCHY_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins}
+plugins_dir=$(realpath -m -- "$plugins_dir")
+target="$plugins_dir/$plugin_id"
+
+if [[ -L $target ]]; then
+  target_source=$(realpath -- "$target")
+  [[ $target_source == "$root" ]] \
+    || fail "installed plugin is a symlink to another source: $target_source"
+  log_ok "Installed plugin already points at the project source"
+  exit 0
+fi
+
+runtime_root=${XDG_RUNTIME_DIR:-/tmp}
+stage=$(mktemp -d "$runtime_root/omarchy-qml-dev.XXXXXX")
+cleanup() {
+  rm -rf -- "$stage"
+}
+trap cleanup EXIT
+
+excludes=(
+  --exclude=.git/
+  --exclude=.omarchy-qml-dev/
+  --exclude=.sublime/
+  --exclude=.luacov
+  --exclude=coverage/
+)
+
+rsync -a "${excludes[@]}" -- "$root/" "$stage/"
+omarchy plugin validate "$stage"
+
+log_info "Source: $root"
+log_info "Target: $target"
+if [[ $apply != true ]]; then
+  if [[ -d $target ]]; then
+    rsync -ani --delete "${excludes[@]}" -- "$stage/" "$target/"
+  else
+    find "$stage" -mindepth 1 -printf 'create %P\n' | sort
+  fi
+  log_info "Dry run only; pass --apply to synchronize"
+  exit 0
+fi
+
+mkdir -p -- "$plugins_dir" "$target"
+rsync -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
+omarchy plugin validate "$target"
+log_ok "Deployed $plugin_id"
+log_info "The Omarchy plugin watcher will reload the deployed files"
