@@ -24,7 +24,6 @@ local task_fields = {
 
 local reserved_task_names = {
   check = true,
-  check_reload = true,
   deploy = true,
   hot_reload = true,
   logs = true,
