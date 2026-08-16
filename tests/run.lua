@@ -112,6 +112,13 @@ assert(
     == nil,
   "reserved built-in task name was accepted"
 )
+assert(
+  project.decode_tasks(
+    '{"version":1,"tasks":{"check_reload":{"command":["custom-workflow"]}}}',
+    "memory"
+  ),
+  "available custom task name was rejected"
+)
 
 local initialized = assert(project.initialize(root, { validator = accept_validation }))
 local gitignore_path = vim.fs.joinpath(root, ".gitignore")
