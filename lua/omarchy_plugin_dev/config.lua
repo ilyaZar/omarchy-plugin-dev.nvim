@@ -39,11 +39,11 @@ local values = vim.deepcopy(defaults)
 
 local function validate(opts)
   if not vim.tbl_contains({ "auto", "restart", "soft" }, opts.restart.mode) then
-    error("omarchy-qml-dev.nvim: restart.mode must be auto, restart, or soft")
+    error("omarchy-plugin-dev.nvim: restart.mode must be auto, restart, or soft")
   end
 
   if opts.mappings ~= false and type(opts.mappings) ~= "table" then
-    error("omarchy-qml-dev.nvim: mappings must be a table or false")
+    error("omarchy-plugin-dev.nvim: mappings must be a table or false")
   end
 end
 

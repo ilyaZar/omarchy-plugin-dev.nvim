@@ -188,7 +188,7 @@ function M.detect(bufnr_or_path)
 end
 
 function M.tasks_path(root)
-  return vim.fs.joinpath(root, ".omarchy-qml-dev", "tasks.json")
+  return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
 end
 
 function M.ensure_gitignore(root)
@@ -204,12 +204,12 @@ function M.ensure_gitignore(root)
 
   for _, line in ipairs(lines) do
     local normalized = vim.trim(line):gsub("^/", ""):gsub("/$", "")
-    if normalized == ".omarchy-qml-dev" then
+    if normalized == ".omarchy-plugin-dev" then
       return path, false
     end
   end
 
-  lines[#lines + 1] = ".omarchy-qml-dev/"
+  lines[#lines + 1] = ".omarchy-plugin-dev/"
   local write_error = vim.fn.writefile(lines, path)
   if write_error ~= 0 then
     return nil, nil, string.format("could not update %s", path)
@@ -279,7 +279,7 @@ function M.load_tasks(root)
 end
 
 function M.external_validate(root)
-  local executable = require("omarchy_qml_dev.config").get().executables.omarchy
+  local executable = require("omarchy_plugin_dev.config").get().executables.omarchy
   if vim.fn.executable(executable) ~= 1 then
     return nil, string.format("cannot initialize: %s is not executable", executable)
   end

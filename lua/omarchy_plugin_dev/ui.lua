@@ -18,7 +18,7 @@ function M.open_text(title, lines, opts)
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.bo[bufnr].bufhidden = "wipe"
-  vim.bo[bufnr].filetype = opts.filetype or "omarchy-qml-dev"
+  vim.bo[bufnr].filetype = opts.filetype or "omarchy-plugin-dev"
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.bo[bufnr].modifiable = false
@@ -44,25 +44,25 @@ function M.open_text(title, lines, opts)
       vim.api.nvim_win_close(dashboard_win, true)
     end
   end
-  vim.keymap.set("n", "q", close, { buffer = bufnr, desc = "Close Omarchy QML window" })
-  vim.keymap.set("n", "<Esc>", close, { buffer = bufnr, desc = "Close Omarchy QML window" })
+  vim.keymap.set("n", "q", close, { buffer = bufnr, desc = "Close Omarchy Plugin window" })
+  vim.keymap.set("n", "<Esc>", close, { buffer = bufnr, desc = "Close Omarchy Plugin window" })
 
   for lhs, action in pairs(opts.actions or {}) do
     vim.keymap.set("n", lhs, function()
       close()
       action()
-    end, { buffer = bufnr, desc = "Omarchy QML: " .. lhs, silent = true })
+    end, { buffer = bufnr, desc = "Omarchy Plugin: " .. lhs, silent = true })
   end
   return bufnr, dashboard_win
 end
 
 function M.dashboard(info, bufnr)
-  local config = require("omarchy_qml_dev.config").get()
-  local lsp_state, lsp_detail = require("omarchy_qml_dev.lsp").status(bufnr)
-  local reload = require("omarchy_qml_dev.reload").capability()
+  local config = require("omarchy_plugin_dev.config").get()
+  local lsp_state, lsp_detail = require("omarchy_plugin_dev.lsp").status(bufnr)
+  local reload = require("omarchy_plugin_dev.reload").capability()
   local overseer_available = pcall(require, "overseer")
   local tasks_data, tasks_error, tasks_exists =
-    require("omarchy_qml_dev.project").load_tasks(info.root)
+    require("omarchy_plugin_dev.project").load_tasks(info.root)
   local tasks_status = tasks_exists and (tasks_data and "valid" or "invalid") or "not initialized"
 
   local lines = {
@@ -93,8 +93,8 @@ function M.dashboard(info, bufnr)
     table.insert(lines, 12, "  tasks error: " .. tasks_error)
   end
 
-  local actions = require("omarchy_qml_dev.actions")
-  return M.open_text("Omarchy QML Dev", lines, {
+  local actions = require("omarchy_plugin_dev.actions")
+  return M.open_text("Omarchy Plugin Dev", lines, {
     actions = {
       t = function()
         actions.test(bufnr)

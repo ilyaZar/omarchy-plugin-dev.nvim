@@ -1,7 +1,7 @@
-local config = require("omarchy_qml_dev.config")
-local project = require("omarchy_qml_dev.project")
-local reload = require("omarchy_qml_dev.reload")
-local tasks = require("omarchy_qml_dev.tasks")
+local config = require("omarchy_plugin_dev.config")
+local project = require("omarchy_plugin_dev.project")
+local reload = require("omarchy_plugin_dev.reload")
+local tasks = require("omarchy_plugin_dev.tasks")
 
 local temp_root = vim.fn.tempname()
 assert(vim.fn.mkdir(temp_root, "p") == 1, "temporary root was not created")
@@ -55,6 +55,7 @@ for _, name in ipairs({
   "OmaDevLogs",
   "OmaDevDoctor",
   "OmarchyQmlDev",
+  "OmarchyPluginDev",
 }) do
   assert(vim.fn.exists(":" .. name) == 0, name .. " command remains registered")
 end
@@ -67,7 +68,7 @@ for _, name in ipairs({
   "edit_tasks",
   "init_project",
 }) do
-  assert(require("omarchy_qml_dev")[name] == nil, name .. " remains in the top-level Lua API")
+  assert(require("omarchy_plugin_dev")[name] == nil, name .. " remains in the top-level Lua API")
 end
 
 local root = vim.fs.joinpath(temp_root, "plugin with spaces")
@@ -116,7 +117,7 @@ local initialized = assert(project.initialize(root, { validator = accept_validat
 local gitignore_path = vim.fs.joinpath(root, ".gitignore")
 assert(vim.fn.filereadable(gitignore_path) == 1, "initialization did not create .gitignore")
 assert(
-  vim.tbl_contains(vim.fn.readfile(gitignore_path), ".omarchy-qml-dev/"),
+  vim.tbl_contains(vim.fn.readfile(gitignore_path), ".omarchy-plugin-dev/"),
   "project task directory was not ignored"
 )
 local initialized_data = assert(project.load_tasks(root))
@@ -135,7 +136,7 @@ assert(
 )
 local ignore_count = 0
 for _, line in ipairs(vim.fn.readfile(gitignore_path)) do
-  if line == ".omarchy-qml-dev/" then
+  if line == ".omarchy-plugin-dev/" then
     ignore_count = ignore_count + 1
   end
 end
@@ -240,12 +241,12 @@ for _, step in ipairs(rebuild_steps) do
 end
 assert(restart_count == 1, "clean rebuild must restart the shell exactly once")
 assert(
-  rebuild_steps[#rebuild_steps].metadata.omarchy_qml_dev_action == "restart",
+  rebuild_steps[#rebuild_steps].metadata.omarchy_plugin_dev_action == "restart",
   "clean rebuild does not end with the shell restart"
 )
 
 config.setup()
-local lsp = require("omarchy_qml_dev.lsp")
+local lsp = require("omarchy_plugin_dev.lsp")
 assert(lsp.executable(), "installed canonical qmlls was not discovered")
 
 local original_notify = vim.notify
@@ -270,36 +271,39 @@ config.setup({
 local project_buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_set_current_buf(project_buf)
 vim.api.nvim_buf_set_name(project_buf, qml_path)
-require("omarchy_qml_dev.mappings").detach(project_buf)
+require("omarchy_plugin_dev.mappings").detach(project_buf)
 vim.keymap.set("n", "<localleader>b", "<cmd>let g:user_mapping_ran = 1<cr>", {
   buffer = project_buf,
   desc = "User conflict",
 })
 vim.bo[project_buf].filetype = "qml"
-require("omarchy_qml_dev").attach(project_buf)
+require("omarchy_plugin_dev").attach(project_buf)
 assert(mapping_by_desc(project_buf, "User conflict"), "existing mapping was overwritten")
 assert(
-  not mapping_by_desc(project_buf, "Omarchy QML: check"),
+  not mapping_by_desc(project_buf, "Omarchy Plugin: check"),
   "removed check mapping was installed"
 )
 assert(
-  not mapping_by_desc(project_buf, "Omarchy QML: reload or restart shell"),
+  not mapping_by_desc(project_buf, "Omarchy Plugin: reload or restart shell"),
   "removed reload mapping was installed"
 )
-assert(mapping_by_desc(project_buf, "Omarchy QML: test"), "project-local test mapping is missing")
-assert(mapping_by_desc(project_buf, "Omarchy QML: hot reload"), "Ctrl+B mapping is missing")
 assert(
-  mapping_by_desc(project_buf, "Omarchy QML: clean rebuild"),
+  mapping_by_desc(project_buf, "Omarchy Plugin: test"),
+  "project-local test mapping is missing"
+)
+assert(mapping_by_desc(project_buf, "Omarchy Plugin: hot reload"), "Ctrl+B mapping is missing")
+assert(
+  mapping_by_desc(project_buf, "Omarchy Plugin: clean rebuild"),
   "Ctrl+Shift+B mapping is missing"
 )
 local lsp_root
-require("omarchy_qml_dev.lsp").root_dir(project_buf, function(root_dir)
+require("omarchy_plugin_dev.lsp").root_dir(project_buf, function(root_dir)
   lsp_root = root_dir
 end)
 assert(lsp_root == project.canonical(root), "LSP root did not use the detected Omarchy project")
 for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
   assert(
-    not mapping.desc or not mapping.desc:find("Omarchy QML:", 1, true),
+    not mapping.desc or not mapping.desc:find("Omarchy Plugin:", 1, true),
     "mapping leaked globally"
   )
 end
@@ -307,13 +311,13 @@ end
 vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(unrelated, "View.qml")))
 vim.bo.filetype = "qml"
 local unrelated_buf = vim.api.nvim_get_current_buf()
-require("omarchy_qml_dev").attach(unrelated_buf)
+require("omarchy_plugin_dev").attach(unrelated_buf)
 assert(
-  not mapping_by_desc(unrelated_buf, "Omarchy QML: test"),
+  not mapping_by_desc(unrelated_buf, "Omarchy Plugin: test"),
   "unrelated QML buffer received project mappings"
 )
 local unrelated_lsp_root
-require("omarchy_qml_dev.lsp").root_dir(unrelated_buf, function(root_dir)
+require("omarchy_plugin_dev.lsp").root_dir(unrelated_buf, function(root_dir)
   unrelated_lsp_root = root_dir
 end)
 assert(unrelated_lsp_root == nil, "LSP root callback claimed an unrelated QML project")
@@ -347,7 +351,7 @@ assert(opened[#opened].focus_task_id == check_task.id, "check task was not shown
 
 vim.cmd.buffer(project_buf)
 vim.cmd.OmaDev()
-assert(vim.bo.filetype == "omarchy-qml-dev", "dashboard did not open")
+assert(vim.bo.filetype == "omarchy-plugin-dev", "dashboard did not open")
 vim.cmd.close()
 vim.cmd.buffer(project_buf)
 vim.cmd.OmaDevHealth()
@@ -357,4 +361,4 @@ vim.cmd.close()
 package.loaded.overseer = original_overseer
 assert(vim.fn.delete(temp_root, "rf") == 0, "temporary test tree was not removed")
 
-print("omarchy-qml-dev.nvim tests passed")
+print("omarchy-plugin-dev.nvim tests passed")

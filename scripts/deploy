@@ -85,7 +85,7 @@ if [[ -L $target ]]; then
 fi
 
 runtime_root=${XDG_RUNTIME_DIR:-/tmp}
-stage=$(mktemp -d "$runtime_root/omarchy-qml-dev.XXXXXX")
+stage=$(mktemp -d "$runtime_root/omarchy-plugin-dev.XXXXXX")
 cleanup() {
   rm -rf -- "$stage"
 }
@@ -93,7 +93,7 @@ trap cleanup EXIT
 
 excludes=(
   --exclude=.git/
-  --exclude=.omarchy-qml-dev/
+  --exclude=.omarchy-plugin-dev/
   --exclude=.sublime/
   --exclude=.luacov
   --exclude=coverage/

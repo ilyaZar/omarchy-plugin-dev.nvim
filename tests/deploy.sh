@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-test_root=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/omarchy-qml-dev-test.XXXXXX")
+test_root=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/omarchy-plugin-dev-test.XXXXXX")
 cleanup() {
   rm -rf -- "$test_root"
 }
@@ -9,13 +9,13 @@ trap cleanup EXIT
 
 project="$test_root/project"
 plugins="$test_root/plugins"
-mkdir -p "$project/.omarchy-qml-dev"
+mkdir -p "$project/.omarchy-plugin-dev"
 
 printf '%s\n' 'import QtQuick' 'Item {}' >"$project/Service.qml"
 printf '%s\n' \
   '{"schemaVersion":1,"id":"dev.deploy-test","name":"Deploy Test","version":"1","kinds":["service"],"entryPoints":{"service":"Service.qml"}}' \
   >"$project/manifest.json"
-printf '%s\n' '{}' >"$project/.omarchy-qml-dev/tasks.json"
+printf '%s\n' '{}' >"$project/.omarchy-plugin-dev/tasks.json"
 
 OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --dry-run "$project" >/dev/null
 [[ ! -e $plugins/dev.deploy-test ]] || {
@@ -25,7 +25,7 @@ OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --dry-run "$project" >/dev/null
 
 OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" >/dev/null
 [[ -f $plugins/dev.deploy-test/Service.qml ]]
-[[ ! -e $plugins/dev.deploy-test/.omarchy-qml-dev ]]
+[[ ! -e $plugins/dev.deploy-test/.omarchy-plugin-dev ]]
 
 printf '%s\n' stale >"$plugins/dev.deploy-test/stale.txt"
 printf '%s\n' 'import QtQuick' 'Item { objectName: "updated" }' >"$project/Service.qml"

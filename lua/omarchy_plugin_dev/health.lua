@@ -1,7 +1,7 @@
 local M = {}
 
 function M.check()
-  vim.health.start("omarchy-qml-dev.nvim")
+  vim.health.start("omarchy-plugin-dev.nvim")
   if vim.fn.has("nvim-0.11") == 1 then
     vim.health.ok("Neovim 0.11 or newer")
   else
@@ -14,7 +14,7 @@ function M.check()
     vim.health.error("overseer.nvim is required for tasks")
   end
 
-  local lsp = require("omarchy_qml_dev.lsp")
+  local lsp = require("omarchy_plugin_dev.lsp")
   if lsp.available() then
     vim.health.ok("qmlls is available at " .. lsp.executable())
   else
