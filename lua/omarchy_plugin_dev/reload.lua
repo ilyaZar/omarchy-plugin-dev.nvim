@@ -59,7 +59,7 @@ end
 
 function M.capability(opts)
   opts = opts or {}
-  local config = opts.config or require("omarchy_qml_dev.config").get()
+  local config = opts.config or require("omarchy_plugin_dev.config").get()
   local endpoint = config.restart.soft_reload
   local output = opts.ipc_output
   local inspect_error

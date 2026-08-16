@@ -1,11 +1,11 @@
 local M = {}
 
-M.name = "omarchy_qml_dev"
+M.name = "omarchy_plugin_dev"
 
 local enabled = false
 
 local function candidates()
-  local configured = require("omarchy_qml_dev.config").get().executables.qml_language_server
+  local configured = require("omarchy_plugin_dev.config").get().executables.qml_language_server
   if configured ~= "auto" then
     return { configured }
   end
@@ -33,7 +33,7 @@ function M.installation_message()
 end
 
 function M.root_dir(bufnr, on_dir)
-  local info = require("omarchy_qml_dev.project").detect(bufnr)
+  local info = require("omarchy_plugin_dev.project").detect(bufnr)
   if info then
     on_dir(info.root)
   end
@@ -46,7 +46,7 @@ function M.setup()
 
   local executable = M.executable()
   local cmd = { executable or "qmlls", "-E" }
-  for _, import_path in ipairs(require("omarchy_qml_dev.config").get().qml_import_paths) do
+  for _, import_path in ipairs(require("omarchy_plugin_dev.config").get().qml_import_paths) do
     vim.list_extend(cmd, { "-I", import_path })
   end
   vim.lsp.config(M.name, {
@@ -77,7 +77,7 @@ function M.status(bufnr)
     return "running", string.format("running as client %d", clients[1].id)
   end
   if enabled then
-    return "available", "available; starts only in detected Omarchy QML buffers"
+    return "available", "available; starts only in detected Omarchy Plugin buffers"
   end
   return "available", "available; run setup() to enable it"
 end

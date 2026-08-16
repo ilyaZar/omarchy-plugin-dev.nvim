@@ -1,27 +1,27 @@
-*omarchy-qml-dev.txt*  Omarchy Quattro QML development through Overseer
+*omarchy-plugin-dev.txt*  Omarchy plugin development through Overseer
 
 ==============================================================================
-CONTENTS                                            *omarchy-qml-dev-contents*
+CONTENTS                                            *omarchy-plugin-dev-contents*
 
-1. Introduction.............................|omarchy-qml-dev-introduction|
-2. Requirements.............................|omarchy-qml-dev-requirements|
-3. Initialization...........................|omarchy-qml-dev-initialization|
-4. Commands.................................|omarchy-qml-dev-commands|
-5. Mappings.................................|omarchy-qml-dev-mappings|
-6. Configuration............................|omarchy-qml-dev-configuration|
-7. Reload semantics.........................|omarchy-qml-dev-reload|
-8. Troubleshooting..........................|omarchy-qml-dev-troubleshooting|
+1. Introduction.............................|omarchy-plugin-dev-introduction|
+2. Requirements.............................|omarchy-plugin-dev-requirements|
+3. Initialization...........................|omarchy-plugin-dev-initialization|
+4. Commands.................................|omarchy-plugin-dev-commands|
+5. Mappings.................................|omarchy-plugin-dev-mappings|
+6. Configuration............................|omarchy-plugin-dev-configuration|
+7. Reload semantics.........................|omarchy-plugin-dev-reload|
+8. Troubleshooting..........................|omarchy-plugin-dev-troubleshooting|
 
 ==============================================================================
-INTRODUCTION                                    *omarchy-qml-dev-introduction*
+INTRODUCTION                                    *omarchy-plugin-dev-introduction*
 
-omarchy-qml-dev.nvim detects schema-version-1 Omarchy shell plugin manifests
+omarchy-plugin-dev.nvim detects schema-version-1 Omarchy shell plugin manifests
 and provides explicit Overseer tasks, native LSP setup, project-local maps,
 and a small dashboard. It stays inactive for unrelated QML projects and never
 runs a project command merely because a buffer opened.
 
 ==============================================================================
-REQUIREMENTS                                    *omarchy-qml-dev-requirements*
+REQUIREMENTS                                    *omarchy-plugin-dev-requirements*
 
 - Neovim 0.11 or newer
 - stevearc/overseer.nvim
@@ -36,13 +36,13 @@ On Arch: >bash
 The plugin also recognizes the Mason qmlls package.
 
 ==============================================================================
-INITIALIZATION                                *omarchy-qml-dev-initialization*
+INITIALIZATION                                *omarchy-plugin-dev-initialization*
 
                                                                *:OmaDevInit*
 :OmaDevInit
     Validate the detected project with the installed Omarchy validator and
     add the hidden task directory to .gitignore before creating:
-        .omarchy-qml-dev/tasks.json
+        .omarchy-plugin-dev/tasks.json
 
 :OmaDevInit!
     Explicitly approve replacing an existing tasks.json. Without !, an
@@ -54,7 +54,7 @@ always run at the detected project root. Shell command strings are invalid.
 The "test" task supplies the Test action. No project-local Lua is loaded.
 
 ==============================================================================
-COMMANDS                                            *omarchy-qml-dev-commands*
+COMMANDS                                            *omarchy-plugin-dev-commands*
 
                                                                    *:OmaDev*
 :OmaDev
@@ -77,10 +77,10 @@ COMMANDS                                            *omarchy-qml-dev-commands*
 
                                                              *:OmaDevHealth*
 :OmaDevHealth
-    Run the standard `checkhealth omarchy-qml-dev` report.
+    Run the standard `checkhealth omarchy-plugin-dev` report.
 
 ==============================================================================
-MAPPINGS                                            *omarchy-qml-dev-mappings*
+MAPPINGS                                            *omarchy-plugin-dev-mappings*
 
 Defaults exist only in QML buffers inside detected Omarchy projects:
 
@@ -93,10 +93,10 @@ Existing mappings are preserved. The plugin does not change maplocalleader.
 Every mapping is buffer-local and has a human-readable description.
 
 ==============================================================================
-CONFIGURATION                                  *omarchy-qml-dev-configuration*
+CONFIGURATION                                  *omarchy-plugin-dev-configuration*
 
 Call setup through a plugin manager's opts or directly: >lua
-  require("omarchy_qml_dev").setup({
+  require("omarchy_plugin_dev").setup({
     mappings = {
       enabled = true,
       hot_reload = "<C-b>",
@@ -118,7 +118,7 @@ notifications, and Overseer task definitions are configurable. Setup and
 commands remain available without mappings.
 
 ==============================================================================
-RELOAD SEMANTICS                                      *omarchy-qml-dev-reload*
+RELOAD SEMANTICS                                      *omarchy-plugin-dev-reload*
 
 There is no compile step for ordinary Omarchy QML plugins. The current shell's
 plugin watcher detects deployed files. Omarchy versions using Quickshell
@@ -132,10 +132,10 @@ mode="soft" refuses to fall back; mode="restart" always performs the full
 restart.
 
 ==============================================================================
-TROUBLESHOOTING                              *omarchy-qml-dev-troubleshooting*
+TROUBLESHOOTING                              *omarchy-plugin-dev-troubleshooting*
 
 Run :OmaDevHealth, or invoke the native command directly: >vim
-  :checkhealth omarchy-qml-dev
+  :checkhealth omarchy-plugin-dev
 <
 The report checks the Neovim version, Overseer, and the QML language server.
 

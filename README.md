@@ -1,4 +1,4 @@
-# omarchy-qml-dev.nvim
+# omarchy-plugin-dev.nvim
 
 [![Neovim][neovim-badge]][neovim]
 [![Lua][lua-badge]][lua]
@@ -6,7 +6,7 @@
 A focused Neovim workflow for developing
 [Omarchy Quattro][omarchy] shell plugins written in QML.
 
-`omarchy-qml-dev.nvim` lets you:
+`omarchy-plugin-dev.nvim` lets you:
 
 - validate, lint, and test a plugin through [Overseer][overseer]
 - deploy and hot reload with `<C-b>`
@@ -23,8 +23,8 @@ Using [lazy.nvim][lazy]:
 
 ```lua
 {
-  "ilyaZar/omarchy-qml-dev.nvim",
-  main = "omarchy_qml_dev",
+  "ilyaZar/omarchy-plugin-dev.nvim",
+  main = "omarchy_plugin_dev",
   ft = { "qml" },
   cmd = {
     "OmaDev",
@@ -62,7 +62,7 @@ test command:
 :OmaDevInit
 ```
 
-This creates the ignored file `.omarchy-qml-dev/tasks.json`:
+This creates the ignored file `.omarchy-plugin-dev/tasks.json`:
 
 ```json
 {
@@ -112,7 +112,7 @@ Existing mappings are preserved. The plugin never changes
 The defaults work without configuration. For example:
 
 ```lua
-require("omarchy_qml_dev").setup({
+require("omarchy_plugin_dev").setup({
   mappings = {
     hot_reload = "<C-b>",
     rebuild = "<C-S-b>",
@@ -128,7 +128,7 @@ require("omarchy_qml_dev").setup({
 Set `mappings = false` to disable every default mapping. Individual mappings
 also accept `false`.
 
-See `:help omarchy-qml-dev` for executable overrides, QML import paths, and
+See `:help omarchy-plugin-dev` for executable overrides, QML import paths, and
 reload configuration.
 
 ## Requirements
@@ -161,7 +161,7 @@ Run:
 :OmaDevHealth
 ```
 
-This delegates to Neovim's standard `:checkhealth omarchy-qml-dev` report.
+This delegates to Neovim's standard `:checkhealth omarchy-plugin-dev` report.
 
 ## Development
 

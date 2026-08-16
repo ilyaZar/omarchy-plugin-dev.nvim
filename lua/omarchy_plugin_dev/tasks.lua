@@ -1,7 +1,7 @@
 local M = {}
 
-local messages = require("omarchy_qml_dev.messages")
-local project = require("omarchy_qml_dev.project")
+local messages = require("omarchy_plugin_dev.messages")
+local project = require("omarchy_plugin_dev.project")
 
 local core_names = {
   check = true,
@@ -16,9 +16,9 @@ local core_names = {
 
 local function metadata(root, action)
   return {
-    omarchy_qml_dev = true,
-    omarchy_qml_dev_action = action,
-    omarchy_qml_dev_root = root,
+    omarchy_plugin_dev = true,
+    omarchy_plugin_dev_action = action,
+    omarchy_plugin_dev_root = root,
   }
 end
 
@@ -61,7 +61,7 @@ local function require_executable(command, root, purpose)
 end
 
 local function apply_override(name, root, spec)
-  local override = require("omarchy_qml_dev.config").get().tasks[name]
+  local override = require("omarchy_plugin_dev.config").get().tasks[name]
   if override == nil then
     return spec
   end
@@ -69,7 +69,7 @@ local function apply_override(name, root, spec)
     return override({ root = root, default = vim.deepcopy(spec), project = project })
   end
   if type(override) ~= "table" then
-    error(string.format("omarchy-qml-dev.nvim: tasks.%s must be a table or function", name))
+    error(string.format("omarchy-plugin-dev.nvim: tasks.%s must be a table or function", name))
   end
   return vim.tbl_extend("force", spec or {}, vim.deepcopy(override))
 end
@@ -91,7 +91,7 @@ function M.qml_files(root)
 end
 
 function M.check_steps(root)
-  local config = require("omarchy_qml_dev.config").get()
+  local config = require("omarchy_plugin_dev.config").get()
   local validate = {
     name = "Validate Omarchy plugin manifest",
     cmd = { config.executables.omarchy, "plugin", "validate", root },
@@ -120,13 +120,13 @@ end
 
 function M.check_spec(root)
   local spec = {
-    name = "Omarchy QML: check",
+    name = "Omarchy Plugin: check",
     cwd = root,
     strategy = { "orchestrator", tasks = M.check_steps(root) },
     components = { "default" },
     metadata = metadata(root, "check"),
   }
-  return finalize_spec(apply_override("check", root, spec), root, "check", "Omarchy QML: check")
+  return finalize_spec(apply_override("check", root, spec), root, "check", "Omarchy Plugin: check")
 end
 
 function M.test_spec(root)
@@ -138,30 +138,30 @@ function M.test_spec(root)
   if not definition then
     local override = apply_override("test", root, nil)
     if override then
-      return finalize_spec(override, root, "test", "Omarchy QML: test")
+      return finalize_spec(override, root, "test", "Omarchy Plugin: test")
     end
     return nil, nil, "missing"
   end
   local spec = {
-    name = "Omarchy QML: test",
+    name = "Omarchy Plugin: test",
     cmd = vim.deepcopy(definition.command),
     cwd = root,
     components = components(),
     metadata = metadata(root, "test"),
   }
   if definition.description then
-    spec.name = "Omarchy QML: " .. definition.description
+    spec.name = "Omarchy Plugin: " .. definition.description
   end
-  return finalize_spec(apply_override("test", root, spec), root, "test", "Omarchy QML: test")
+  return finalize_spec(apply_override("test", root, spec), root, "test", "Omarchy Plugin: test")
 end
 
 function M.reload_spec(root, opts)
-  local capability = require("omarchy_qml_dev.reload").capability(opts)
+  local capability = require("omarchy_plugin_dev.reload").capability(opts)
   if not capability.available then
     return nil, capability.detail
   end
   local spec = {
-    name = "Omarchy QML: " .. capability.label,
+    name = "Omarchy Plugin: " .. capability.label,
     cmd = capability.command,
     cwd = root,
     components = { "default" },
@@ -171,7 +171,7 @@ function M.reload_spec(root, opts)
     apply_override("reload", root, spec),
     root,
     "reload",
-    "Omarchy QML: " .. capability.label
+    "Omarchy Plugin: " .. capability.label
   ),
     nil,
     capability
@@ -187,7 +187,7 @@ function M.deploy_spec(root)
 end
 
 function M.restart_spec(root)
-  local executable_name = require("omarchy_qml_dev.config").get().executables.omarchy
+  local executable_name = require("omarchy_plugin_dev.config").get().executables.omarchy
   return finalize_spec({
     name = "Restart Omarchy shell once",
     cmd = { executable_name, "restart", "shell" },
@@ -207,7 +207,7 @@ end
 
 function M.hot_reload_spec(root)
   local spec = {
-    name = "Omarchy QML: hot reload",
+    name = "Omarchy Plugin: hot reload",
     cwd = root,
     strategy = {
       "orchestrator",
@@ -220,7 +220,7 @@ function M.hot_reload_spec(root)
     apply_override("hot_reload", root, spec),
     root,
     "hot_reload",
-    "Omarchy QML: hot reload"
+    "Omarchy Plugin: hot reload"
   )
 end
 
@@ -234,7 +234,7 @@ function M.rebuild_spec(root)
   steps[#steps + 1] = M.restart_spec(root)
 
   local spec = {
-    name = "Omarchy QML: clean rebuild",
+    name = "Omarchy Plugin: clean rebuild",
     cwd = root,
     strategy = { "orchestrator", tasks = steps },
     components = { "default" },
@@ -244,7 +244,7 @@ function M.rebuild_spec(root)
     apply_override("rebuild", root, spec),
     root,
     "rebuild",
-    "Omarchy QML: clean rebuild"
+    "Omarchy Plugin: clean rebuild"
   )
 end
 
@@ -256,7 +256,7 @@ function M.check_reload_spec(root, opts)
   capability = assert(capability)
   local steps = { M.check_spec(root), reload_spec }
   local spec = {
-    name = "Omarchy QML: check, then " .. capability.label:lower(),
+    name = "Omarchy Plugin: check, then " .. capability.label:lower(),
     cwd = root,
     strategy = { "orchestrator", tasks = steps },
     components = { "default" },
@@ -266,12 +266,12 @@ function M.check_reload_spec(root, opts)
     apply_override("check_reload", root, spec),
     root,
     "check_reload",
-    "Omarchy QML: check, then " .. capability.label:lower()
+    "Omarchy Plugin: check, then " .. capability.label:lower()
   )
 end
 
 function M.logs_spec(root)
-  local config = require("omarchy_qml_dev.config").get()
+  local config = require("omarchy_plugin_dev.config").get()
   local command = {
     config.executables.journalctl,
     "--user",
@@ -282,13 +282,18 @@ function M.logs_spec(root)
     command[#command + 1] = "-f"
   end
   local spec = {
-    name = "Omarchy QML: shell logs",
+    name = "Omarchy Plugin: shell logs",
     cmd = command,
     cwd = root,
     components = { "default" },
     metadata = metadata(root, "logs"),
   }
-  return finalize_spec(apply_override("logs", root, spec), root, "logs", "Omarchy QML: shell logs")
+  return finalize_spec(
+    apply_override("logs", root, spec),
+    root,
+    "logs",
+    "Omarchy Plugin: shell logs"
+  )
 end
 
 function M.custom_spec(root, name)
@@ -297,11 +302,11 @@ function M.custom_spec(root, name)
     return nil, load_error
   end
   local definition = data.tasks[name]
-  local configured = require("omarchy_qml_dev.config").get().tasks[name]
+  local configured = require("omarchy_plugin_dev.config").get().tasks[name]
   local spec
   if definition then
     spec = {
-      name = "Omarchy QML: " .. (definition.description or name),
+      name = "Omarchy Plugin: " .. (definition.description or name),
       cmd = vim.deepcopy(definition.command),
       cwd = root,
       components = components(),
@@ -309,7 +314,7 @@ function M.custom_spec(root, name)
     }
   elseif type(configured) == "table" then
     spec = vim.deepcopy(configured)
-    spec.name = spec.name or ("Omarchy QML: " .. name)
+    spec.name = spec.name or ("Omarchy Plugin: " .. name)
     spec.cwd = root
     spec.metadata = vim.tbl_extend("force", spec.metadata or {}, metadata(root, name))
   elseif type(configured) == "function" then
@@ -318,13 +323,13 @@ function M.custom_spec(root, name)
   if not spec then
     return nil, string.format("task '%s' is not defined", name)
   end
-  return finalize_spec(spec, root, name, "Omarchy QML: " .. name)
+  return finalize_spec(spec, root, name, "Omarchy Plugin: " .. name)
 end
 
 local function overseer()
   local ok, module = pcall(require, "overseer")
   if not ok then
-    messages.show("overseer.nvim is required to run Omarchy QML tasks", vim.log.levels.ERROR)
+    messages.show("overseer.nvim is required to run Omarchy Plugin tasks", vim.log.levels.ERROR)
     return nil
   end
   return module
@@ -342,7 +347,7 @@ function M.start(spec)
 end
 
 local function check_tools(root)
-  local config = require("omarchy_qml_dev.config").get()
+  local config = require("omarchy_plugin_dev.config").get()
   return require_executable(config.executables.omarchy, root, "Check")
     and require_executable(config.executables.qmllint, root, "QML lint")
 end
@@ -438,7 +443,7 @@ local function project_task_names(root)
   if not data then
     return nil, load_error
   end
-  for name in pairs(require("omarchy_qml_dev.config").get().tasks) do
+  for name in pairs(require("omarchy_plugin_dev.config").get().tasks) do
     if not core_names[name] then
       names[#names + 1] = name
       seen[name] = true
@@ -460,7 +465,7 @@ function M.open_overseer(root)
   end
   local focused
   for _, task in ipairs(backend.list_tasks({ recent_first = true })) do
-    if task.metadata and task.metadata.omarchy_qml_dev_root == root then
+    if task.metadata and task.metadata.omarchy_plugin_dev_root == root then
       focused = task.id
       break
     end
@@ -500,7 +505,7 @@ function M.picker(root)
       end,
     },
     {
-      label = require("omarchy_qml_dev.reload").capability().label,
+      label = require("omarchy_plugin_dev.reload").capability().label,
       action = function()
         M.reload(root)
       end,
@@ -533,7 +538,7 @@ function M.picker(root)
     }
   end
   vim.ui.select(choices, {
-    prompt = "Omarchy QML project tasks",
+    prompt = "Omarchy Plugin project tasks",
     format_item = function(choice)
       return choice.label
     end,

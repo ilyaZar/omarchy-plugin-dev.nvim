@@ -3,10 +3,10 @@ local M = {}
 local attached = {}
 
 local definitions = {
-  hot_reload = { desc = "Omarchy QML: hot reload", method = "hot_reload", force = true },
-  rebuild = { desc = "Omarchy QML: clean rebuild", method = "rebuild", force = true },
-  test = { desc = "Omarchy QML: test", method = "test" },
-  menu = { desc = "Omarchy QML: project dashboard", method = "dashboard" },
+  hot_reload = { desc = "Omarchy Plugin: hot reload", method = "hot_reload", force = true },
+  rebuild = { desc = "Omarchy Plugin: clean rebuild", method = "rebuild", force = true },
+  test = { desc = "Omarchy Plugin: test", method = "test" },
+  menu = { desc = "Omarchy Plugin: project dashboard", method = "dashboard" },
 }
 
 local function existing_mapping(bufnr, lhs)
@@ -38,7 +38,7 @@ function M.attach(bufnr)
   if attached[bufnr] or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
-  local mappings = require("omarchy_qml_dev.config").get().mappings
+  local mappings = require("omarchy_plugin_dev.config").get().mappings
   if mappings == false or mappings.enabled == false then
     attached[bufnr] = {}
     return
@@ -49,7 +49,7 @@ function M.attach(bufnr)
     local lhs = mappings[key]
     if lhs and lhs ~= false and (definition.force or not existing_mapping(bufnr, lhs)) then
       vim.keymap.set("n", lhs, function()
-        require("omarchy_qml_dev.actions")[definition.method](bufnr)
+        require("omarchy_plugin_dev.actions")[definition.method](bufnr)
       end, {
         buffer = bufnr,
         desc = definition.desc,
