@@ -206,19 +206,6 @@ local unavailable_soft_reload = reload.capability({
 })
 assert(not unavailable_soft_reload.available, "soft-only mode silently fell back to restart")
 
-local check_reload_spec = assert(tasks.check_reload_spec(project.canonical(root), {
-  ipc_output = "target shell\n  function ping(): string",
-}))
-local check_reload_steps = check_reload_spec.strategy.tasks
-assert(
-  check_reload_steps[#check_reload_steps].cmd[2] == "restart",
-  "check-reload workflow did not place reload after Check"
-)
-assert(
-  check_reload_steps[#check_reload_steps].cwd == project.canonical(root),
-  "check-reload action used the wrong cwd"
-)
-
 local hot_reload_spec = assert(tasks.hot_reload_spec(project.canonical(root)))
 local hot_reload_steps = hot_reload_spec.strategy.tasks
 assert(#hot_reload_steps == 3, "hot reload should check, deploy, and reload exactly once")

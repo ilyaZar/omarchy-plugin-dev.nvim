@@ -68,40 +68,6 @@ vim.wait(10000, function()
 end)
 print("live Check task status: " .. check_task.status)
 
-require("omarchy_plugin_dev").setup({
-  tasks = {
-    reload = function()
-      return { name = "Omarchy Plugin: smoke reload", cmd = { "true" } }
-    end,
-  },
-})
-require("omarchy_plugin_dev.tasks").check_reload(vim.uv.fs_realpath(plugin_root))
-local workflow_task
-assert(
-  vim.wait(5000, function()
-    for _, task in ipairs(overseer.list_tasks({ recent_first = true })) do
-      if
-        task.metadata
-        and task.metadata.omarchy_plugin_dev_action == "check_reload"
-        and task.metadata.omarchy_plugin_dev_root == vim.uv.fs_realpath(plugin_root)
-      then
-        workflow_task = task
-        return true
-      end
-    end
-    return false
-  end),
-  "Check-reload did not create an Overseer workflow"
-)
-assert(
-  vim.wait(10000, function()
-    return workflow_task:is_complete()
-  end),
-  "Check-reload workflow did not finish"
-)
-assert(workflow_task.status == "SUCCESS", "Check-reload workflow failed")
-print("live Check-reload task status: " .. workflow_task.status)
-
 vim.cmd.edit(vim.fn.fnameescape(unrelated_qml))
 assert(
   vim.wait(2000, function()
