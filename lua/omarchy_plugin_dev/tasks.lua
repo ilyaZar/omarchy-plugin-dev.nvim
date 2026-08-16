@@ -5,7 +5,6 @@ local project = require("omarchy_plugin_dev.project")
 
 local core_names = {
   check = true,
-  check_reload = true,
   deploy = true,
   hot_reload = true,
   logs = true,
@@ -248,28 +247,6 @@ function M.rebuild_spec(root)
   )
 end
 
-function M.check_reload_spec(root, opts)
-  local reload_spec, reload_error, capability = M.reload_spec(root, opts)
-  if not reload_spec then
-    return nil, reload_error
-  end
-  capability = assert(capability)
-  local steps = { M.check_spec(root), reload_spec }
-  local spec = {
-    name = "Omarchy Plugin: check, then " .. capability.label:lower(),
-    cwd = root,
-    strategy = { "orchestrator", tasks = steps },
-    components = { "default" },
-    metadata = metadata(root, "check_reload"),
-  }
-  return finalize_spec(
-    apply_override("check_reload", root, spec),
-    root,
-    "check_reload",
-    "Omarchy Plugin: check, then " .. capability.label:lower()
-  )
-end
-
 function M.logs_spec(root)
   local config = require("omarchy_plugin_dev.config").get()
   local command = {
@@ -404,18 +381,6 @@ function M.rebuild(root)
   return M.start(M.rebuild_spec(root))
 end
 
-function M.check_reload(root)
-  if not check_tools(root) then
-    return nil
-  end
-  local spec, spec_error = M.check_reload_spec(root)
-  if not spec then
-    messages.show("Reload is unavailable: " .. spec_error, vim.log.levels.ERROR)
-    return nil
-  end
-  return M.start(spec)
-end
-
 function M.logs(root)
   local spec = assert(M.logs_spec(root))
   if not require_executable(spec.cmd[1], root, "Shell logs") then
@@ -508,12 +473,6 @@ function M.picker(root)
       label = require("omarchy_plugin_dev.reload").capability().label,
       action = function()
         M.reload(root)
-      end,
-    },
-    {
-      label = "Check, then reload",
-      action = function()
-        M.check_reload(root)
       end,
     },
     {
