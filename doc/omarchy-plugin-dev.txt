@@ -9,7 +9,7 @@ CONTENTS                                            *omarchy-plugin-dev-contents
 4. Commands.................................|omarchy-plugin-dev-commands|
 5. Mappings.................................|omarchy-plugin-dev-mappings|
 6. Configuration............................|omarchy-plugin-dev-configuration|
-7. Reload semantics.........................|omarchy-plugin-dev-reload|
+7. Build semantics..........................|omarchy-plugin-dev-build|
 8. Troubleshooting..........................|omarchy-plugin-dev-troubleshooting|
 
 ==============================================================================
@@ -25,9 +25,9 @@ REQUIREMENTS                                    *omarchy-plugin-dev-requirements
 
 - Neovim 0.11 or newer
 - stevearc/overseer.nvim
-- omarchy and qmllint for Check
+- omarchy and Qt 6 qmllint for Check
 - journalctl for shell logs
-- qs for shell IPC capability inspection
+- jq and rsync for staged deployment
 - Qt qmlls for LSP features
 
 On Arch: >bash
@@ -43,6 +43,10 @@ INITIALIZATION                                *omarchy-plugin-dev-initialization
     Validate the detected project with the installed Omarchy validator and
     add the hidden task directory to .gitignore before creating:
         .omarchy-plugin-dev/tasks.json
+
+    If an executable ./scripts/test or ./tests/all.sh exists, choose whether
+    to configure it. Otherwise an empty tasks object is created and opened
+    for editing. Initialization never invents a missing test command.
 
 :OmaDevInit!
     Explicitly approve replacing an existing tasks.json. Without !, an
@@ -67,13 +71,14 @@ COMMANDS                                            *omarchy-plugin-dev-commands
 
                                                           *:OmaDevHotReload*
 :OmaDevHotReload
-    Check, stage, validate, and deploy the project. Omarchy's plugin watcher
-    reconstructs the deployed plugin in the running shell.
+    Check, stage, validate, and deploy the project, then restart the Omarchy
+    shell exactly once.
 
                                                             *:OmaDevRebuild*
 :OmaDevRebuild
-    Check, run an executable configured test, deploy, then restart the shell
-    exactly once.
+    Check, run the configured test, deploy, then restart the shell exactly
+    once. A missing test task or unavailable test executable stops the
+    default workflow. A complete tasks.rebuild override owns its test policy.
 
                                                              *:OmaDevHealth*
 :OmaDevHealth
@@ -84,8 +89,8 @@ MAPPINGS                                            *omarchy-plugin-dev-mappings
 
 Defaults exist only in QML buffers inside detected Omarchy projects:
 
-  <C-b>            Check, deploy, and hot reload
-  <C-S-b>          Clean rebuild and restart once
+  <C-b>            Check, deploy, and restart once
+  <C-S-b>          Test, deploy, and restart once
   <localleader>t   Test
   <localleader>o   Dashboard
 
@@ -97,6 +102,9 @@ CONFIGURATION                                  *omarchy-plugin-dev-configuration
 
 Call setup through a plugin manager's opts or directly: >lua
   require("omarchy_plugin_dev").setup({
+    diagnostics = {
+      virtual_text = false,
+    },
     mappings = {
       enabled = true,
       hot_reload = "<C-b>",
@@ -104,32 +112,50 @@ Call setup through a plugin manager's opts or directly: >lua
       test = false,
     },
     executables = {
-      qmllint = "qmllint",
+      jq = "jq",
+      omarchy = "omarchy",
+      qmllint = "auto",
       qml_language_server = "auto",
+      rsync = "rsync",
     },
-    restart = { mode = "auto" },
     notify = true,
     log_level = vim.log.levels.INFO,
   })
 <
 Set mappings to false, mappings.enabled to false, or an individual mapping to
-false to disable defaults. Executable names, QML import paths, restart mode,
-notifications, and Overseer task definitions are configurable. Setup and
-commands remain available without mappings.
+false to disable defaults. Executable names, QML import paths, notifications,
+and Overseer task definitions are configurable. Setup and commands remain
+available without mappings.
+
+The qmllint value "auto" prefers /usr/lib/qt6/bin/qmllint and accepts a PATH
+candidate only when it reports Qt 6 or newer. An explicit override is honored
+as-is. The dashboard shows the selected path and version.
+
+The QML language server prefers the system Qt qmlls, then PATH and Mason. A
+generic qmlls attached by another Neovim integration is detached only from
+detected Omarchy Plugin buffers. The project-aware server resolves qs.*
+imports through a generated cache bridge; it does not write .qmlls.ini or
+other tooling files into the plugin repository.
+
+Inline diagnostic text is disabled for this server by default because qmlls
+cannot fully model runtime-injected Omarchy objects. Underlines, signs,
+diagnostic pickers, and the Overseer lint quickfix list remain available. Set
+diagnostics.virtual_text=true to restore it, or diagnostics=false to inherit
+Neovim's global diagnostic display.
 
 ==============================================================================
-RELOAD SEMANTICS                                      *omarchy-plugin-dev-reload*
+BUILD SEMANTICS                                        *omarchy-plugin-dev-build*
 
-There is no compile step for ordinary Omarchy QML plugins. The current shell's
-plugin watcher detects deployed files. Omarchy versions using Quickshell
-generation reload replace plugin code in the current process. Older versions
-restart the shell once because their rescan can retain stale IPC handlers.
+There is no compile step for ordinary Omarchy QML plugins. Both build mappings
+use an Overseer orchestrator and expose omarchy restart shell as their final
+step. This prevents QML components and IPC handlers from surviving from the
+previous plugin generation.
 
-Clean rebuild uses `omarchy restart shell` once after deployment. Hot reload
-uses shell.rescanPlugins when IPC introspection and the active shell source
-verify generation reload, and otherwise falls back to the full restart.
-mode="soft" refuses to fall back; mode="restart" always performs the full
-restart.
+Deployment never runs omarchy plugin update. A symlink from the installed
+plugin to the project is preserved, and a project opened directly inside its
+installed checkout needs no copy. Otherwise deployment synchronizes a clean
+staged copy. A separate git-managed installation is refused rather than
+modified, because doing so would dirty the checkout and break normal updates.
 
 ==============================================================================
 TROUBLESHOOTING                              *omarchy-plugin-dev-troubleshooting*
@@ -137,6 +163,7 @@ TROUBLESHOOTING                              *omarchy-plugin-dev-troubleshooting
 Run :OmaDevHealth, or invoke the native command directly: >vim
   :checkhealth omarchy-plugin-dev
 <
-The report checks the Neovim version, Overseer, and the QML language server.
+The report checks the Neovim version, Overseer, exact executable paths, the
+Qt 6 qmllint version, and the QML language server.
 
 vim:tw=78:ts=8:noet:ft=help:norl:
