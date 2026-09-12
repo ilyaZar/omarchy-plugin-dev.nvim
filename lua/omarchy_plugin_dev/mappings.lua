@@ -3,8 +3,8 @@ local M = {}
 local attached = {}
 
 local definitions = {
-  hot_reload = { desc = "Omarchy Plugin: hot reload", method = "hot_reload", force = true },
-  rebuild = { desc = "Omarchy Plugin: clean rebuild", method = "rebuild", force = true },
+  hot_reload = { desc = "Omarchy Plugin: build and restart", method = "hot_reload", force = true },
+  rebuild = { desc = "Omarchy Plugin: test, build, and restart", method = "rebuild", force = true },
   test = { desc = "Omarchy Plugin: test", method = "test" },
   menu = { desc = "Omarchy Plugin: project dashboard", method = "dashboard" },
 }

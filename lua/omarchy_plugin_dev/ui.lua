@@ -6,8 +6,21 @@ local function status(value)
   return value and "available" or "missing"
 end
 
-local function executable(name)
-  return vim.fn.executable(name) == 1
+local function executable_status(name)
+  if vim.fn.executable(name) ~= 1 then
+    return "missing - " .. name
+  end
+  local path = vim.fn.exepath(name)
+  return "available - " .. (path ~= "" and path or name)
+end
+
+local function replace_line(bufnr, line, text)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  vim.bo[bufnr].modifiable = true
+  vim.api.nvim_buf_set_lines(bufnr, line - 1, line, false, { text })
+  vim.bo[bufnr].modifiable = false
 end
 
 function M.open_text(title, lines, opts)
@@ -59,42 +72,47 @@ end
 function M.dashboard(info, bufnr)
   local config = require("omarchy_plugin_dev.config").get()
   local lsp_state, lsp_detail = require("omarchy_plugin_dev.lsp").status(bufnr)
-  local reload = require("omarchy_plugin_dev.reload").capability()
+  local lint_state, lint_detail = require("omarchy_plugin_dev.qmllint").status()
   local overseer_available = pcall(require, "overseer")
-  local tasks_data, tasks_error, tasks_exists =
-    require("omarchy_plugin_dev.project").load_tasks(info.root)
+  local project = require("omarchy_plugin_dev.project")
+  local tasks_data, tasks_error, tasks_exists = project.load_tasks(info.root)
+  local test_state = project.test_state(info.root)
   local tasks_status = tasks_exists and (tasks_data and "valid" or "invalid") or "not initialized"
+  if tasks_error then
+    tasks_status = tasks_status .. " - " .. tasks_error
+  end
 
   local lines = {
     "Project",
     "  root: " .. info.root,
-    string.format("  manifest: valid schema v1 (%s)", info.manifest.id),
+    string.format("  manifest: recognized schema v1 (%s)", info.manifest.id),
+    "  official validation: checking",
     "",
     "Tools",
     "  Overseer: " .. status(overseer_available),
     "  qml-language-server: " .. lsp_state .. " - " .. lsp_detail,
-    "  omarchy: " .. status(executable(config.executables.omarchy)),
-    "  qmllint: " .. status(executable(config.executables.qmllint)),
-    "  logs: "
-      .. status(executable(config.executables.journalctl))
-      .. " (journal _COMM=quickshell)",
+    "  omarchy: " .. executable_status(config.executables.omarchy),
+    "  qmllint: " .. lint_state .. " - " .. lint_detail,
+    "  jq: " .. executable_status(config.executables.jq),
+    "  rsync: " .. executable_status(config.executables.rsync),
+    "  logs: " .. executable_status(config.executables.journalctl) .. " (_COMM=quickshell)",
     "  project tasks: " .. tasks_status,
+    "  test task: " .. test_state.label,
     "",
-    "Reload",
-    string.format("  %s: %s", reload.label, reload.detail),
+    "Build",
+    "  Ctrl+B: check, deploy, restart shell",
+    "  Ctrl+Shift+B: check, test, deploy, restart shell",
     "",
     "Actions",
-    "  h  Hot reload            b  Clean rebuild",
+    "  h  Build and restart      b  Test, build, restart",
     "  t  Test                  v  Health",
-    "  i  Initialize project    e  Edit tasks.json",
+    "  p  Project tasks         i  Initialize project",
+    "  e  Edit tasks.json",
     "  q  Close",
   }
-  if tasks_error then
-    table.insert(lines, 12, "  tasks error: " .. tasks_error)
-  end
 
   local actions = require("omarchy_plugin_dev.actions")
-  return M.open_text("Omarchy Plugin Dev", lines, {
+  local dashboard_buf, dashboard_window = M.open_text("Omarchy Plugin Dev", lines, {
     actions = {
       t = function()
         actions.test(bufnr)
@@ -104,6 +122,9 @@ function M.dashboard(info, bufnr)
       end,
       b = function()
         actions.rebuild(bufnr)
+      end,
+      p = function()
+        actions.tasks(bufnr)
       end,
       i = function()
         actions.init_project(bufnr)
@@ -116,6 +137,14 @@ function M.dashboard(info, bufnr)
       end,
     },
   })
+  project.external_validate_async(info.root, function(valid, detail)
+    local validation_status = valid and "passed" or "failed"
+    if detail then
+      validation_status = validation_status .. " - " .. detail:gsub("\n", " | ")
+    end
+    replace_line(dashboard_buf, 4, "  official validation: " .. validation_status)
+  end)
+  return dashboard_buf, dashboard_window
 end
 
 return M

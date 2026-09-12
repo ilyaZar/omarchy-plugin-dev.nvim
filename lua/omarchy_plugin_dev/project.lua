@@ -1,21 +1,6 @@
 local M = {}
 
-local required_manifest_fields = {
-  "id",
-  "name",
-  "version",
-  "kinds",
-  "entryPoints",
-}
-
-local entry_point_for_kind = {
-  bar = "bar",
-  ["bar-widget"] = "barWidget",
-  menu = "menu",
-  overlay = "overlay",
-  panel = "panel",
-  service = "service",
-}
+local manifest = require("omarchy_plugin_dev.manifest")
 
 local task_fields = {
   command = true,
@@ -28,7 +13,17 @@ local reserved_task_names = {
   hot_reload = true,
   logs = true,
   rebuild = true,
-  reload = true,
+}
+
+local conventional_test_runners = {
+  {
+    command = { "./scripts/test" },
+    path = "scripts/test",
+  },
+  {
+    command = { "./tests/all.sh" },
+    path = "tests/all.sh",
+  },
 }
 
 local function is_object(value)
@@ -43,148 +38,12 @@ local function read_file(path)
   return table.concat(lines, "\n")
 end
 
-function M.canonical(path)
-  local absolute = vim.fn.fnamemodify(vim.fn.expand(path), ":p")
-  local normalized = vim.fs.normalize(absolute)
-  return vim.uv.fs_realpath(normalized) or normalized
-end
-
-function M.start(bufnr)
-  bufnr = bufnr or 0
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    return nil
-  end
-
-  local path = vim.api.nvim_buf_get_name(bufnr)
-  if path == "" then
-    return M.canonical(vim.uv.cwd())
-  end
-  if vim.fn.isdirectory(path) == 1 then
-    return M.canonical(path)
-  end
-  return M.canonical(vim.fs.dirname(path))
-end
-
-function M.decode_manifest(text, source_path)
-  local ok, manifest = pcall(vim.json.decode, text)
-  if not ok then
-    return nil, string.format("manifest.json is not valid JSON at %s: %s", source_path, manifest)
-  end
-  if not is_object(manifest) then
-    return nil, string.format("manifest.json must contain an object at %s", source_path)
-  end
-  return manifest
-end
-
-function M.validate_manifest(manifest, root)
-  if not is_object(manifest) then
-    return nil, "manifest must be an object"
-  end
-  if manifest.schemaVersion ~= 1 then
-    return nil, "manifest schemaVersion must be the number 1"
-  end
-  for _, field in ipairs(required_manifest_fields) do
-    if manifest[field] == nil then
-      return nil, string.format("manifest is missing required field '%s'", field)
-    end
-  end
-
-  local id = manifest.id
-  if type(id) ~= "string" or id == "" then
-    return nil, "manifest id must be a non-empty string"
-  end
-  if not id:match("^[A-Za-z0-9][A-Za-z0-9._-]*$") or id:find("..", 1, true) then
-    return nil, string.format("manifest id '%s' is invalid", id)
-  end
-  if id:match("^omarchy%.") then
-    return nil, string.format("manifest id '%s' uses the reserved omarchy.* namespace", id)
-  end
-
-  if type(manifest.kinds) ~= "table" or not vim.islist(manifest.kinds) or #manifest.kinds == 0 then
-    return nil, "manifest kinds must be a non-empty array"
-  end
-  if not is_object(manifest.entryPoints) then
-    return nil, "manifest entryPoints must be an object"
-  end
-
-  if is_object(manifest.barWidget) and manifest.barWidget.defaultSection ~= nil then
-    local section = manifest.barWidget.defaultSection
-    if not vim.tbl_contains({ "left", "center", "right" }, section) then
-      return nil, "manifest barWidget.defaultSection must be left, center, or right"
-    end
-  end
-
-  for name, entry_point in pairs(manifest.entryPoints) do
-    if type(entry_point) ~= "string" or entry_point == "" then
-      return nil, string.format("manifest entryPoints.%s must be a non-empty string", name)
-    end
-    if vim.startswith(entry_point, "/") or entry_point:find("..", 1, true) then
-      return nil, string.format("manifest entryPoints.%s must be a safe relative path", name)
-    end
-    if root and vim.fn.filereadable(vim.fs.joinpath(root, entry_point)) ~= 1 then
-      return nil, string.format("manifest entry point does not exist: %s", entry_point)
-    end
-  end
-
-  for _, kind in ipairs(manifest.kinds) do
-    if type(kind) ~= "string" or kind == "" then
-      return nil, "manifest kinds entries must be non-empty strings"
-    end
-    local required_entry_point = entry_point_for_kind[kind]
-    if required_entry_point and manifest.entryPoints[required_entry_point] == nil then
-      return nil,
-        string.format("manifest kind '%s' requires entryPoints.%s", kind, required_entry_point)
-    end
-  end
-
-  return true
-end
-
-function M.validate_root(root)
-  root = M.canonical(root)
-  local path = vim.fs.joinpath(root, "manifest.json")
-  local text, read_error = read_file(path)
-  if not text then
-    return nil, read_error
-  end
-  local manifest, decode_error = M.decode_manifest(text, path)
-  if not manifest then
-    return nil, decode_error
-  end
-  local valid, validation_error = M.validate_manifest(manifest, root)
-  if not valid then
-    return nil, string.format("invalid Omarchy plugin manifest at %s: %s", path, validation_error)
-  end
-  return {
-    root = root,
-    manifest_path = path,
-    manifest = manifest,
-  }
-end
-
-function M.detect(bufnr_or_path)
-  local start
-  if type(bufnr_or_path) == "string" then
-    local path = M.canonical(bufnr_or_path)
-    start = vim.fn.isdirectory(path) == 1 and path or vim.fs.dirname(path)
-  else
-    start = M.start(bufnr_or_path or 0)
-  end
-  if not start then
-    return nil, "buffer has no usable path"
-  end
-
-  local manifest_path = vim.fs.find("manifest.json", {
-    upward = true,
-    path = start,
-    type = "file",
-    limit = 1,
-  })[1]
-  if not manifest_path then
-    return nil, "no manifest.json found in this directory or its parents"
-  end
-  return M.validate_root(vim.fs.dirname(manifest_path))
-end
+M.canonical = manifest.canonical
+M.start = manifest.start
+M.detect = manifest.detect
+M.validate_root = manifest.validate_root
+M.decode_manifest = manifest.decode
+M.validate_manifest = manifest.validate
 
 function M.tasks_path(root)
   return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
@@ -277,21 +136,174 @@ function M.load_tasks(root)
   return data, decode_error, true
 end
 
-function M.external_validate(root)
+function M.command_path(root, command)
+  if type(command) ~= "table" or type(command[1]) ~= "string" then
+    return nil
+  end
+  local executable = command[1]
+  if executable:find("/", 1, true) and not vim.startswith(executable, "/") then
+    executable = vim.fs.normalize(vim.fs.joinpath(root, executable))
+  end
+  if vim.fn.executable(executable) ~= 1 then
+    return nil
+  end
+  local resolved = vim.fn.exepath(executable)
+  return resolved ~= "" and resolved or executable
+end
+
+function M.test_candidates(root)
+  root = M.canonical(root)
+  local candidates = {}
+  for _, runner in ipairs(conventional_test_runners) do
+    local path = vim.fs.joinpath(root, runner.path)
+    if vim.fn.filereadable(path) == 1 and vim.fn.executable(path) == 1 then
+      candidates[#candidates + 1] = {
+        command = vim.deepcopy(runner.command),
+        label = runner.command[1],
+      }
+    end
+  end
+  return candidates
+end
+
+function M.has_test_files(root)
+  for _, directory in ipairs({ "test", "tests", "spec", "specs" }) do
+    if #vim.fn.globpath(root, "**/" .. directory, false, true) > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+function M.test_state(root)
+  local data, load_error, tasks_exists = M.load_tasks(root)
+  if not data then
+    return {
+      kind = "invalid",
+      label = "invalid - " .. load_error,
+      tasks_exists = tasks_exists,
+    }
+  end
+
+  local definition = data.tasks.test
+  if definition then
+    local path = M.command_path(root, definition.command)
+    if path then
+      return {
+        kind = "configured",
+        label = "configured - " .. table.concat(definition.command, " "),
+        path = path,
+        tasks_exists = tasks_exists,
+      }
+    end
+    return {
+      kind = "unavailable",
+      label = "configured, executable missing - " .. definition.command[1],
+      tasks_exists = tasks_exists,
+    }
+  end
+
+  local candidates = M.test_candidates(root)
+  if #candidates > 0 then
+    local labels = vim.tbl_map(function(candidate)
+      return candidate.label
+    end, candidates)
+    return {
+      candidates = candidates,
+      kind = "candidate",
+      label = "runner found, not configured - " .. table.concat(labels, ", "),
+      tasks_exists = tasks_exists,
+    }
+  end
+  if M.has_test_files(root) then
+    return {
+      kind = "unaggregated",
+      label = "tests found, no aggregate runner",
+      tasks_exists = tasks_exists,
+    }
+  end
+  return {
+    kind = "absent",
+    label = "no conventional tests detected",
+    tasks_exists = tasks_exists,
+  }
+end
+
+local function validation_output(result)
+  local parts = {}
+  for _, value in ipairs({ result.stderr, result.stdout }) do
+    value = vim.trim(value or "")
+    if value ~= "" then
+      parts[#parts + 1] = value
+    end
+  end
+  return table.concat(parts, "\n")
+end
+
+local function validation_command(root)
   local executable = require("omarchy_plugin_dev.config").get().executables.omarchy
   if vim.fn.executable(executable) ~= 1 then
-    return nil, string.format("cannot initialize: %s is not executable", executable)
+    return nil, string.format("cannot validate: %s is not executable", executable)
   end
-  local result = vim.system({ executable, "plugin", "validate", root }, { text = true }):wait(10000)
+  return { executable, "plugin", "validate", root }
+end
+
+function M.external_validate(root)
+  local command, command_error = validation_command(root)
+  if not command then
+    return nil, command_error
+  end
+  local result = vim.system(command, { text = true }):wait(10000)
   if result.code ~= 0 then
-    local detail = vim.trim(result.stderr or result.stdout or "validation failed")
+    local detail = validation_output(result)
+    if detail == "" then
+      detail = "validation failed"
+    end
     return nil, string.format("Omarchy validation failed: %s", detail)
+  end
+  return true
+end
+
+function M.external_validate_async(root, callback)
+  local command, command_error = validation_command(root)
+  if not command then
+    vim.schedule(function()
+      callback(nil, command_error)
+    end)
+    return
+  end
+  vim.system(command, { text = true, timeout = 10000 }, function(result)
+    local valid = result.code == 0
+    local detail = validation_output(result)
+    if not valid and detail == "" then
+      detail = "validation failed"
+    end
+    vim.schedule(function()
+      callback(valid, detail ~= "" and detail or nil)
+    end)
+  end)
+end
+
+local function valid_test_command(command)
+  if command == nil then
+    return true
+  end
+  if type(command) ~= "table" or not vim.islist(command) or #command == 0 then
+    return false
+  end
+  for _, argument in ipairs(command) do
+    if type(argument) ~= "string" or argument == "" then
+      return false
+    end
   end
   return true
 end
 
 function M.initialize(root, opts)
   opts = opts or {}
+  if not valid_test_command(opts.test_command) then
+    return nil, "test command must be a non-empty argument array"
+  end
   local info, validation_error = M.validate_root(root)
   if not info then
     return nil, validation_error
@@ -311,16 +323,26 @@ function M.initialize(root, opts)
   if vim.fn.mkdir(directory, "p") == 0 and vim.fn.isdirectory(directory) ~= 1 then
     return nil, string.format("could not create directory: %s", directory)
   end
-  local lines = {
-    "{",
-    '  "version": 1,',
-    '  "tasks": {',
-    '    "test": {',
-    '      "command": ["./scripts/test"]',
-    "    }",
-    "  }",
-    "}",
-  }
+  local lines
+  if opts.test_command then
+    lines = {
+      "{",
+      '  "version": 1,',
+      '  "tasks": {',
+      '    "test": {',
+      '      "command": ' .. vim.json.encode(opts.test_command),
+      "    }",
+      "  }",
+      "}",
+    }
+  else
+    lines = {
+      "{",
+      '  "version": 1,',
+      '  "tasks": {}',
+      "}",
+    }
+  end
   local write_error = vim.fn.writefile(lines, path)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
