@@ -13,14 +13,14 @@ log_warn() {
   printf '%b -> WARNING: %s%b\n' "$YELLOW" "$*" "$NC" >&2
 }
 
-if (( $# != 2 )); then
-  log_error "Usage: $0 <omarchy-plugin-root> <neovim-init.lua>"
+if (( $# < 1 || $# > 2 )); then
+  log_error "Usage: $0 <omarchy-plugin-root> [neovim-init.lua]"
   exit 2
 fi
 
-project_root=$(realpath "$1")
-nvim_init=$(realpath "$2")
 plugin_root=$(cd "$(dirname "$0")/.." && pwd)
+project_root=$(realpath "$1")
+nvim_init=$(realpath "${2:-$plugin_root/tests/smoke_init.lua}")
 cache_root=${XDG_CACHE_HOME:-$HOME/.cache}
 mkdir -p "$cache_root"
 smoke_root=$(mktemp -d "$cache_root/omarchy-plugin-dev-smoke.XXXXXX")
@@ -36,19 +36,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mapfile -t qml_files < <(rg --files "$project_root" -g '*.qml')
-if (( ${#qml_files[@]} == 0 )); then
-  log_error "No QML file found under $project_root"
-  exit 1
-fi
+omarchy plugin validate "$project_root"
+entry_points=$(jq -c '.entryPoints | to_entries | sort_by(.key) | map(.value)' \
+  "$project_root/manifest.json")
+first_entry_point=$(jq -er '.[0]' <<<"$entry_points")
 
 mkdir -p "$smoke_root/unrelated" "$smoke_root/init"
-cp "${qml_files[0]}" "$smoke_root/unrelated/Unrelated.qml"
+cp "$project_root/$first_entry_point" "$smoke_root/unrelated/Unrelated.qml"
 rsync -a --exclude=.git/ --exclude=.omarchy-plugin-dev/ \
   "$project_root/" "$smoke_root/init/"
 
 cd "$plugin_root"
 OMARCHY_PLUGIN_DEV_SMOKE_ROOT="$project_root" \
+  OMARCHY_PLUGIN_DEV_ENTRY_POINTS="$entry_points" \
   OMARCHY_PLUGIN_DEV_UNRELATED_QML="$smoke_root/unrelated/Unrelated.qml" \
   OMARCHY_PLUGIN_DEV_INIT_ROOT="$smoke_root/init" \
   "${NVIM:-nvim}" --headless -u "$nvim_init" \
