@@ -59,7 +59,11 @@ done
   exit 2
 }
 
-for command in jq omarchy rsync; do
+JQ=${OMARCHY_PLUGIN_DEV_JQ:-jq}
+OMARCHY=${OMARCHY_PLUGIN_DEV_OMARCHY:-omarchy}
+RSYNC=${OMARCHY_PLUGIN_DEV_RSYNC:-rsync}
+
+for command in "$JQ" "$OMARCHY" "$RSYNC"; do
   command -v "$command" >/dev/null 2>&1 || fail "$command is not executable"
 done
 
@@ -67,8 +71,8 @@ root=$(realpath -- "$root")
 [[ -d $root ]] || fail "plugin root does not exist: $root"
 [[ -f $root/manifest.json ]] || fail "manifest.json is missing from $root"
 
-omarchy plugin validate "$root"
-plugin_id=$(jq -er '.id' "$root/manifest.json") || fail "manifest id is invalid"
+"$OMARCHY" plugin validate "$root"
+plugin_id=$("$JQ" -er '.id' "$root/manifest.json") || fail "manifest id is invalid"
 [[ $plugin_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $plugin_id != *..* ]] \
   || fail "unsafe plugin id: $plugin_id"
 
@@ -76,12 +80,27 @@ plugins_dir=${OMARCHY_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plu
 plugins_dir=$(realpath -m -- "$plugins_dir")
 target="$plugins_dir/$plugin_id"
 
+if [[ -e $target || -L $target ]]; then
+  target_source=$(realpath -- "$target") \
+    || fail "installed plugin is a dangling symlink: $target"
+  if [[ $target_source == "$root" ]]; then
+    if [[ -L $target ]]; then
+      log_ok "Installed plugin is linked to the project source"
+    else
+      log_ok "The project source is the installed plugin"
+    fi
+    exit 0
+  fi
+fi
+
 if [[ -L $target ]]; then
-  target_source=$(realpath -- "$target")
-  [[ $target_source == "$root" ]] \
-    || fail "installed plugin is a symlink to another source: $target_source"
-  log_ok "Installed plugin already points at the project source"
-  exit 0
+  fail "installed plugin is a symlink to another source: $target_source"
+fi
+if [[ -e $target && ! -d $target ]]; then
+  fail "installed plugin path is not a directory: $target"
+fi
+if [[ -e $target/.git || -L $target/.git ]]; then
+  fail "installed plugin is a separate git checkout; refusing to overwrite it: $target"
 fi
 
 runtime_root=${XDG_RUNTIME_DIR:-/tmp}
@@ -99,14 +118,14 @@ excludes=(
   --exclude=coverage/
 )
 
-rsync -a "${excludes[@]}" -- "$root/" "$stage/"
-omarchy plugin validate "$stage"
+"$RSYNC" -a "${excludes[@]}" -- "$root/" "$stage/"
+"$OMARCHY" plugin validate "$stage"
 
 log_info "Source: $root"
 log_info "Target: $target"
 if [[ $apply != true ]]; then
   if [[ -d $target ]]; then
-    rsync -ani --delete "${excludes[@]}" -- "$stage/" "$target/"
+    "$RSYNC" -ani --delete "${excludes[@]}" -- "$stage/" "$target/"
   else
     find "$stage" -mindepth 1 -printf 'create %P\n' | sort
   fi
@@ -115,7 +134,7 @@ if [[ $apply != true ]]; then
 fi
 
 mkdir -p -- "$plugins_dir" "$target"
-rsync -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
-omarchy plugin validate "$target"
+"$RSYNC" -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
+"$OMARCHY" plugin validate "$target"
 log_ok "Deployed $plugin_id"
-log_info "The Omarchy plugin watcher will reload the deployed files"
+log_info "The build task will restart the Omarchy shell"

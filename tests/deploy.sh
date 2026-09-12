@@ -33,4 +33,21 @@ OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" >/dev/null
 rg -Fq 'objectName: "updated"' "$plugins/dev.deploy-test/Service.qml"
 [[ ! -e $plugins/dev.deploy-test/stale.txt ]]
 
+rm -rf -- "$plugins/dev.deploy-test"
+ln -s -- "$project" "$plugins/dev.deploy-test"
+OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" >/dev/null
+[[ -L $plugins/dev.deploy-test ]]
+[[ $(realpath -- "$plugins/dev.deploy-test") == $(realpath -- "$project") ]]
+
+rm -f -- "$plugins/dev.deploy-test"
+mkdir -p "$plugins/dev.deploy-test/.git"
+printf '%s\n' preserved >"$plugins/dev.deploy-test/local.txt"
+if OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" \
+  >"$test_root/git-checkout.out" 2>"$test_root/git-checkout.err"; then
+  printf '[error] deployment overwrote a separate git checkout\n' >&2
+  exit 1
+fi
+rg -Fq 'separate git checkout' "$test_root/git-checkout.err"
+rg -Fq preserved "$plugins/dev.deploy-test/local.txt"
+
 printf '[ok] deployment helper\n'
