@@ -23,7 +23,7 @@ local function replace_line(bufnr, line, text)
   vim.bo[bufnr].modifiable = false
 end
 
-function M.open_text(title, lines, opts)
+local function open_text(title, lines, opts)
   opts = opts or {}
   if dashboard_win and vim.api.nvim_win_is_valid(dashboard_win) then
     vim.api.nvim_win_close(dashboard_win, true)
@@ -112,7 +112,7 @@ function M.dashboard(info, bufnr)
   }
 
   local actions = require("omarchy_plugin_dev.actions")
-  local dashboard_buf, dashboard_window = M.open_text("Omarchy Plugin Dev", lines, {
+  local dashboard_buf, dashboard_window = open_text("Omarchy Plugin Dev", lines, {
     actions = {
       t = function()
         actions.test(bufnr)

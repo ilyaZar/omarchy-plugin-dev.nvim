@@ -2,21 +2,33 @@ local M = {}
 
 function M.attach(bufnr)
   bufnr = bufnr or 0
-  if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].buftype ~= "" then
+  if not vim.api.nvim_buf_is_valid(bufnr) then
     return false
   end
-  if vim.bo[bufnr].filetype ~= "qml" then
+  if vim.bo[bufnr].buftype ~= "" then
+    require("omarchy_plugin_dev.formatting").detach(bufnr)
+    return false
+  end
+  local detected_filetype =
+    require("omarchy_plugin_dev.filetype").detect(vim.api.nvim_buf_get_name(bufnr), bufnr)
+  if detected_filetype and vim.bo[bufnr].filetype ~= detected_filetype then
+    vim.bo[bufnr].filetype = detected_filetype
+  end
+  if not vim.tbl_contains({ "qml", "qmljs" }, vim.bo[bufnr].filetype) then
+    require("omarchy_plugin_dev.formatting").detach(bufnr)
     require("omarchy_plugin_dev.mappings").detach(bufnr)
     return false
   end
 
   local info = require("omarchy_plugin_dev.project").detect(bufnr)
   if not info then
+    require("omarchy_plugin_dev.formatting").detach(bufnr)
     require("omarchy_plugin_dev.mappings").detach(bufnr)
     vim.b[bufnr].omarchy_plugin_dev_root = nil
     return false
   end
   vim.b[bufnr].omarchy_plugin_dev_root = info.root
+  require("omarchy_plugin_dev.formatting").attach(bufnr)
   require("omarchy_plugin_dev.mappings").attach(bufnr)
   require("omarchy_plugin_dev.lsp").claim(bufnr)
   if not require("omarchy_plugin_dev.lsp").available() then

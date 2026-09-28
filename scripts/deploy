@@ -25,10 +25,12 @@ fail() {
 }
 
 usage() {
-  printf 'Usage: %s [--apply|--dry-run] <plugin-root>\n' "$0"
+  printf 'Usage: %s [--apply|--dry-run] [--enable-auto] [--enable-first-install] <plugin-root>\n' "$0"
 }
 
 apply=false
+enable_auto=false
+enable_first_install=false
 root=""
 
 while (( $# > 0 )); do
@@ -38,6 +40,12 @@ while (( $# > 0 )); do
     ;;
   --dry-run)
     apply=false
+    ;;
+  --enable-auto)
+    enable_auto=true
+    ;;
+  --enable-first-install)
+    enable_first_install=true
     ;;
   -h | --help)
     usage
@@ -62,10 +70,14 @@ done
 JQ=${OMARCHY_PLUGIN_DEV_JQ:-jq}
 OMARCHY=${OMARCHY_PLUGIN_DEV_OMARCHY:-omarchy}
 RSYNC=${OMARCHY_PLUGIN_DEV_RSYNC:-rsync}
+OMARCHY_SHELL=${OMARCHY_PLUGIN_DEV_OMARCHY_SHELL:-omarchy-shell}
 
 for command in "$JQ" "$OMARCHY" "$RSYNC"; do
   command -v "$command" >/dev/null 2>&1 || fail "$command is not executable"
 done
+if [[ $enable_auto == true || $enable_first_install == true ]]; then
+  command -v "$OMARCHY_SHELL" >/dev/null 2>&1 || fail "$OMARCHY_SHELL is not executable"
+fi
 
 root=$(realpath -- "$root")
 [[ -d $root ]] || fail "plugin root does not exist: $root"
@@ -79,6 +91,61 @@ plugin_id=$("$JQ" -er '.id' "$root/manifest.json") || fail "manifest id is inval
 plugins_dir=${OMARCHY_PLUGINS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins}
 plugins_dir=$(realpath -m -- "$plugins_dir")
 target="$plugins_dir/$plugin_id"
+first_install=true
+if [[ -e $target || -L $target ]]; then
+  first_install=false
+fi
+
+enable_if_requested() {
+  local should_enable=false
+  local discovered=false
+  local enabled=false
+  local enable_output=""
+  local rescanned=false
+  local responsive=false
+
+  if [[ $enable_auto == true || ($enable_first_install == true && $first_install == true) ]]; then
+    should_enable=true
+  fi
+  [[ $apply == true && $should_enable == true ]] || return 0
+
+  for (( attempt = 0; attempt < 100; attempt++ )); do
+    if "$OMARCHY_SHELL" shell ping >/dev/null 2>&1; then
+      responsive=true
+      break
+    fi
+    sleep 0.1
+  done
+  [[ $responsive == true ]] || fail "omarchy-shell did not become ready"
+
+  for (( attempt = 0; attempt < 100; attempt++ )); do
+    if "$OMARCHY_SHELL" shell rescanPlugins >/dev/null 2>&1; then
+      rescanned=true
+      break
+    fi
+    sleep 0.1
+  done
+  [[ $rescanned == true ]] || fail "omarchy-shell did not rescan plugins"
+
+  for (( attempt = 0; attempt < 40; attempt++ )); do
+    if "$OMARCHY" plugin list --json 2>/dev/null | "$JQ" -e --arg id "$plugin_id" \
+      'any(.[]; .id == $id)' >/dev/null; then
+      discovered=true
+      break
+    fi
+    sleep 0.05
+  done
+  [[ $discovered == true ]] || fail "plugin '$plugin_id' is not known after rescan"
+  for (( attempt = 0; attempt < 100; attempt++ )); do
+    if enable_output=$("$OMARCHY" plugin enable "$plugin_id" 2>&1); then
+      enabled=true
+      break
+    fi
+    sleep 0.1
+  done
+  [[ $enabled == true ]] || fail "${enable_output:-could not enable plugin '$plugin_id'}"
+  printf '%s\n' "$enable_output"
+}
 
 if [[ -e $target || -L $target ]]; then
   target_source=$(realpath -- "$target") \
@@ -89,6 +156,7 @@ if [[ -e $target || -L $target ]]; then
     else
       log_ok "The project source is the installed plugin"
     fi
+    enable_if_requested
     exit 0
   fi
 fi
@@ -137,4 +205,5 @@ mkdir -p -- "$plugins_dir" "$target"
 "$RSYNC" -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
 "$OMARCHY" plugin validate "$target"
 log_ok "Deployed $plugin_id"
+enable_if_requested
 log_info "The build task will restart the Omarchy shell"

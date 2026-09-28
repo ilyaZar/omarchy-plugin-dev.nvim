@@ -101,10 +101,6 @@ function M.executable()
   return info and info.path or nil
 end
 
-function M.available()
-  return M.executable() ~= nil
-end
-
 function M.status()
   local info, resolve_error = M.resolve()
   if not info then

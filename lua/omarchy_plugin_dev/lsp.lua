@@ -3,6 +3,21 @@ local M = {}
 M.name = "omarchy_plugin_dev"
 
 local enabled = false
+local javascript_clients = {
+  ts_ls = true,
+  tsserver = true,
+  ["typescript-tools"] = true,
+  vtsls = true,
+}
+
+local function stop_if_unused(client, detached_bufnr)
+  for bufnr in pairs(client.attached_buffers) do
+    if bufnr ~= detached_bufnr then
+      return
+    end
+  end
+  client:stop()
+end
 
 local function candidates()
   local configured = require("omarchy_plugin_dev.config").get().executables.qml_language_server
@@ -51,10 +66,12 @@ function M.claim(bufnr)
 
   local detached = false
   for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
-    if client.name == "qmlls" then
+    local generic_javascript = vim.bo[bufnr].filetype == "qmljs" and javascript_clients[client.name]
+    if client.name == "qmlls" or generic_javascript then
       vim.lsp.buf_detach_client(bufnr, client.id)
       local namespace = vim.lsp.diagnostic.get_namespace(client.id)
       vim.diagnostic.reset(namespace, bufnr)
+      stop_if_unused(client, bufnr)
       detached = true
     end
   end
@@ -67,14 +84,14 @@ function M.setup()
   end
 
   local executable = M.executable()
-  local cmd = { executable or "qmlls", "-E" }
+  local cmd = { executable or "qmlls", "--no-cmake-calls", "-E" }
   local import_paths, import_error = require("omarchy_plugin_dev.qml").import_paths()
   for _, import_path in ipairs(import_paths) do
     vim.list_extend(cmd, { "-I", import_path })
   end
   vim.lsp.config(M.name, {
     cmd = cmd,
-    filetypes = { "qml" },
+    filetypes = { "qml", "qmljs" },
     on_attach = function(client)
       local diagnostics = require("omarchy_plugin_dev.config").get().diagnostics
       if diagnostics ~= false then

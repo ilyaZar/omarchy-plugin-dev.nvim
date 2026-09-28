@@ -27,7 +27,16 @@ local function plugin_root()
 end
 
 local function deploy_command(root)
-  return { vim.fs.joinpath(plugin_root(), "scripts", "deploy"), "--apply", root }
+  local values = config.get()
+  local command = { vim.fs.joinpath(plugin_root(), "scripts", "deploy"), "--apply" }
+  if values.enable_auto then
+    command[#command + 1] = "--enable-auto"
+  end
+  if values.enable_first_install then
+    command[#command + 1] = "--enable-first-install"
+  end
+  command[#command + 1] = root
+  return command
 end
 
 local function apply_override(name, root, spec)
@@ -71,13 +80,18 @@ local function finalize(spec, root, action, default_name)
   return spec
 end
 
-function M.qml_files(root)
+local function qml_files(root)
   local files = vim.fn.globpath(root, "**/*.qml", false, true)
+  for _, path in ipairs(vim.fn.globpath(root, "**/*.js", false, true)) do
+    if require("omarchy_plugin_dev.filetype").is_qml_javascript(path) then
+      files[#files + 1] = path
+    end
+  end
   table.sort(files)
   return files
 end
 
-function M.check_steps(root)
+local function check_steps(root)
   local values = config.get()
   local validate = {
     name = "Validate Omarchy plugin manifest",
@@ -87,15 +101,15 @@ function M.check_steps(root)
     metadata = metadata(root, "validate"),
   }
   local steps = { validate }
-  local qml_files = M.qml_files(root)
-  if #qml_files > 0 then
+  local files = qml_files(root)
+  if #files > 0 then
     local lint_executable = require("omarchy_plugin_dev.qmllint").executable()
       or values.executables.qmllint
     local lint_command = { lint_executable }
     for _, import_path in ipairs(require("omarchy_plugin_dev.qml").import_paths()) do
       vim.list_extend(lint_command, { "-I", import_path })
     end
-    vim.list_extend(lint_command, qml_files)
+    vim.list_extend(lint_command, files)
     steps[#steps + 1] = {
       name = "Lint Omarchy plugin QML",
       cmd = lint_command,
@@ -111,7 +125,7 @@ function M.check(root)
   local spec = {
     name = "Omarchy Plugin: check",
     cwd = root,
-    strategy = { "orchestrator", tasks = M.check_steps(root) },
+    strategy = { "orchestrator", tasks = check_steps(root) },
     components = { "default" },
     metadata = metadata(root, "check"),
   }
@@ -144,7 +158,7 @@ function M.test(root)
   return finalize(apply_override("test", root, spec), root, "test", "Omarchy Plugin: test")
 end
 
-function M.deploy(root)
+local function deploy(root)
   local executables = config.get().executables
   return finalize({
     name = "Deploy Omarchy plugin",
@@ -159,7 +173,7 @@ function M.deploy(root)
   }, root, "deploy", "Deploy Omarchy plugin")
 end
 
-function M.restart(root)
+local function restart(root)
   local executable = config.get().executables.omarchy
   return finalize({
     name = "Restart Omarchy shell once",
@@ -175,7 +189,7 @@ function M.hot_reload(root)
     cwd = root,
     strategy = {
       "orchestrator",
-      tasks = { M.check(root), M.deploy(root), M.restart(root) },
+      tasks = { M.check(root), deploy(root), restart(root) },
     },
     components = { "default" },
     metadata = metadata(root, "hot_reload"),
@@ -214,8 +228,8 @@ function M.rebuild(root)
     test_spec = assert(test_spec)
     steps[#steps + 1] = test_spec
   end
-  steps[#steps + 1] = M.deploy(root)
-  steps[#steps + 1] = M.restart(root)
+  steps[#steps + 1] = deploy(root)
+  steps[#steps + 1] = restart(root)
 
   local spec = {
     name = test_spec and "Omarchy Plugin: test, build, and restart"

@@ -17,7 +17,10 @@ local M = {}
 
 ---@class OmarchyPluginDevOptions
 ---@field diagnostics? false|table
+---@field enable_auto? boolean
+---@field enable_first_install? boolean
 ---@field executables? table<string, string>
+---@field format_on_save? boolean
 ---@field logs? { follow?: boolean, match?: string }
 ---@field mappings? false|table<string, boolean|string>
 ---@field notify? boolean
@@ -27,7 +30,10 @@ local M = {}
 
 ---@class OmarchyPluginDevConfig
 ---@field diagnostics false|table
+---@field enable_auto boolean
+---@field enable_first_install boolean
 ---@field executables OmarchyPluginDevExecutables
+---@field format_on_save boolean
 ---@field logs { follow: boolean, match: string }
 ---@field mappings false|OmarchyPluginDevMappings
 ---@field notify boolean
@@ -40,6 +46,8 @@ local defaults = {
   diagnostics = {
     virtual_text = false,
   },
+  enable_auto = true,
+  enable_first_install = true,
   executables = {
     journalctl = "journalctl",
     jq = "jq",
@@ -48,6 +56,7 @@ local defaults = {
     qmllint = "auto",
     rsync = "rsync",
   },
+  format_on_save = true,
   logs = {
     follow = true,
     match = "_COMM=quickshell",
@@ -71,6 +80,15 @@ local values = vim.deepcopy(defaults)
 local function validate(opts)
   if opts.diagnostics ~= false and type(opts.diagnostics) ~= "table" then
     error("omarchy-plugin-dev.nvim: diagnostics must be a table or false")
+  end
+  if type(opts.enable_auto) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: enable_auto must be a boolean")
+  end
+  if type(opts.enable_first_install) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: enable_first_install must be a boolean")
+  end
+  if type(opts.format_on_save) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: format_on_save must be a boolean")
   end
   if opts.mappings ~= false and type(opts.mappings) ~= "table" then
     error("omarchy-plugin-dev.nvim: mappings must be a table or false")
@@ -107,11 +125,6 @@ end
 ---@return OmarchyPluginDevConfig
 function M.get()
   return values
-end
-
----@return OmarchyPluginDevConfig
-function M.defaults()
-  return vim.deepcopy(defaults)
 end
 
 return M

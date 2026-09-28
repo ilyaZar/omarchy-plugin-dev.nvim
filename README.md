@@ -14,9 +14,14 @@ written in QML.
 - test, deploy, and restart the shell with `<C-S-b>`
 - run the QML language server ([qmlls][qmlls]) only inside detected Omarchy
   plugin projects
+- format plugin QML on save with Qt's official conventions
 
 Ordinary QML projects are left alone. Opening a detected project attaches its
 buffer-local mappings and language server, but never starts a build.
+
+JavaScript library files beginning with `.pragma library` are recognized as
+`qmljs`, so Qt's language server and linter handle them instead of generic
+TypeScript tooling.
 
 ## Installation
 
@@ -26,7 +31,7 @@ Using [lazy.nvim][lazy]:
 {
   "ilyaZar/omarchy-plugin-dev.nvim",
   main = "omarchy_plugin_dev",
-  ft = { "qml" },
+  ft = { "qml", "qmljs" },
   cmd = {
     "OmaDev",
     "OmaDevInit",
@@ -46,8 +51,9 @@ If you use Mason, install the QML language server with:
 :MasonInstall qmlls
 ```
 
-On Arch Linux, `sudo pacman -S qt6-declarative` provides both [qmlls][qmlls] and
-[qmllint][qmllint].
+Omarchy installs `qt6-declarative` by default through Quickshell. On other Arch
+Linux systems, `sudo pacman -S qt6-declarative` provides [qmlls][qmlls],
+[qmllint][qmllint], and `qmlformat`.
 
 The plugin uses an existing Overseer configuration and does not replace it.
 
@@ -119,6 +125,9 @@ require("omarchy_plugin_dev").setup({
   diagnostics = {
     virtual_text = false,
   },
+  enable_auto = true,
+  enable_first_install = true,
+  format_on_save = true,
   mappings = {
     hot_reload = "<C-b>",
     rebuild = "<C-S-b>",
@@ -133,6 +142,14 @@ require("omarchy_plugin_dev").setup({
   },
 })
 ```
+
+`enable_auto` enables every deployment. If disabled, `enable_first_install`
+enables only a new installation.
+
+Detected plugin QML uses four-space indentation and is formatted on save by
+default. This enforces Qt's [QML Coding Conventions][qml-conventions] through
+its [QML formatter][qmlformat], whose default indentation is four spaces. Set
+`format_on_save = false` to opt out.
 
 Set `mappings = false` to disable every default mapping. Individual mappings
 also accept `false`.
@@ -155,14 +172,18 @@ as-is. For language features it prefers the system Qt `qmlls`, then checks
 `PATH` and Mason.
 
 Detected plugin buffers are owned by the project-aware QML server. If another
-Neovim integration automatically attaches a generic `qmlls`, it is detached from
-those buffers only; ordinary QML projects remain untouched. A cache-only import
-bridge exposes the configured Omarchy shell root as `qs`, allowing `qs.Commons`
-and `qs.Ui` to resolve without adding `.qmlls.ini` or generated files to plugin
-repositories.
+Neovim integration automatically attaches a generic `qmlls`, it is detached
+from those buffers only; ordinary QML projects remain untouched. A cache-only
+import bridge exposes the configured Omarchy shell root as `qs`. Qt's QML
+module path is discovered from its Qt 6 tools. This resolves Qt and Omarchy
+imports without adding `.qmlls.ini` or generated files to plugin repositories.
+The bridge gives grouped `Style` and `Color` objects concrete tooling types
+without changing the installed shell, so valid members remain
+quiet while misspellings are still reported. Because ordinary Omarchy plugins
+have no CMake build, the server's automatic CMake discovery is disabled.
 
 Inline diagnostic text is disabled for this server by default because QML
-tooling cannot fully model Omarchy's runtime-injected objects. Underlines,
+tooling cannot fully model every Omarchy runtime-injected object. Underlines,
 signs, diagnostic pickers, and the Overseer lint quickfix list remain available.
 Set `diagnostics.virtual_text = true` to restore inline text, or set
 `diagnostics = false` to inherit Neovim's global diagnostic display.
@@ -203,7 +224,7 @@ This delegates to Neovim's standard `:checkhealth omarchy-plugin-dev` report.
 ```bash
 ./scripts/test
 ./scripts/smoke /path/to/omarchy-plugin
-stylua --check lua plugin tests
+stylua --check ftdetect lua plugin tests
 ```
 
 The smoke command validates and opens every entry point declared by the target
@@ -220,5 +241,7 @@ directory. Pass a second path to test against a different Neovim configuration.
   https://img.shields.io/badge/Neovim-0.11%2B-57A143?logo=neovim&logoColor=white
 [omarchy]: https://omarchy.org/
 [overseer]: https://github.com/stevearc/overseer.nvim
+[qml-conventions]: https://doc.qt.io/qt-6/qml-codingconventions.html
+[qmlformat]: https://doc.qt.io/qt-6/qtqml-tooling-qmlformat.html
 [qmllint]: https://doc.qt.io/qt-6/qtqml-tooling-qmllint.html
 [qmlls]: https://doc.qt.io/qt-6/qtqml-tooling-qmlls.html

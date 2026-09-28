@@ -13,17 +13,6 @@ local core_names = {
   test = true,
 }
 
-M.qml_files = specs.qml_files
-M.check_steps = specs.check_steps
-M.check_spec = specs.check
-M.test_spec = specs.test
-M.deploy_spec = specs.deploy
-M.restart_spec = specs.restart
-M.hot_reload_spec = specs.hot_reload
-M.rebuild_spec = specs.rebuild
-M.logs_spec = specs.logs
-M.custom_spec = specs.custom
-
 local function executable(command, root)
   if command:find("/", 1, true) and not vim.startswith(command, "/") then
     command = vim.fs.joinpath(root, command)
@@ -51,7 +40,7 @@ local function overseer()
   return module
 end
 
-function M.start(spec)
+local function start(spec)
   if not spec then
     return nil
   end
@@ -95,11 +84,11 @@ function M.check(root)
   if not check_tools(root) then
     return nil
   end
-  return M.start(M.check_spec(root))
+  return start(specs.check(root))
 end
 
 function M.test(root)
-  local spec, spec_error, state = M.test_spec(root)
+  local spec, spec_error, state = specs.test(root)
   if not spec then
     if state == "missing" then
       messages.show(
@@ -114,18 +103,18 @@ function M.test(root)
   if spec.cmd and not require_executable(spec.cmd[1], root, "Test") then
     return nil
   end
-  return M.start(spec)
+  return start(spec)
 end
 
 function M.hot_reload(root)
   if not build_tools(root) then
     return nil
   end
-  return M.start(M.hot_reload_spec(root))
+  return start(specs.hot_reload(root))
 end
 
 function M.rebuild(root)
-  local spec, spec_error, test_spec = M.rebuild_spec(root)
+  local spec, spec_error, test_spec = specs.rebuild(root)
   if not spec then
     show_spec_error(spec_error)
     return nil
@@ -138,19 +127,19 @@ function M.rebuild(root)
       return nil
     end
   end
-  return M.start(spec)
+  return start(spec)
 end
 
 function M.logs(root)
-  local spec = assert(M.logs_spec(root))
+  local spec = assert(specs.logs(root))
   if not require_executable(spec.cmd[1], root, "Shell logs") then
     return nil
   end
-  return M.start(spec)
+  return start(spec)
 end
 
-function M.run_custom(root, name)
-  local spec, spec_error = M.custom_spec(root, name)
+local function run_custom(root, name)
+  local spec, spec_error = specs.custom(root, name)
   if not spec then
     show_spec_error(spec_error)
     return nil
@@ -158,7 +147,7 @@ function M.run_custom(root, name)
   if spec.cmd and not require_executable(spec.cmd[1], root, "Project task") then
     return nil
   end
-  return M.start(spec)
+  return start(spec)
 end
 
 local function project_task_names(root)
@@ -183,7 +172,7 @@ local function project_task_names(root)
   return names
 end
 
-function M.open_overseer(root)
+local function open_overseer(root)
   local backend = overseer()
   if not backend then
     return
@@ -238,7 +227,7 @@ function M.picker(root)
     {
       label = "Open Overseer task list",
       action = function()
-        M.open_overseer(root)
+        open_overseer(root)
       end,
     },
   }
@@ -246,7 +235,7 @@ function M.picker(root)
     choices[#choices + 1] = {
       label = "Project: " .. name,
       action = function()
-        M.run_custom(root, name)
+        run_custom(root, name)
       end,
     }
   end

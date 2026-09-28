@@ -3,6 +3,8 @@ if vim.g.loaded_omarchy_plugin_dev == 1 then
 end
 vim.g.loaded_omarchy_plugin_dev = 1
 
+require("omarchy_plugin_dev.filetype").setup()
+
 local function command(name, callback, opts)
   opts = vim.tbl_extend("force", {
     desc = "Omarchy Plugin development action",
@@ -55,6 +57,7 @@ vim.api.nvim_create_autocmd({ "BufEnter", "BufFilePost", "FileType" }, {
 vim.api.nvim_create_autocmd("BufWipeout", {
   group = group,
   callback = function(event)
+    require("omarchy_plugin_dev.formatting").forget(event.buf)
     require("omarchy_plugin_dev.mappings").forget(event.buf)
   end,
   desc = "Forget deleted Omarchy Plugin buffers",

@@ -39,17 +39,14 @@ local function read_file(path)
 end
 
 M.canonical = manifest.canonical
-M.start = manifest.start
 M.detect = manifest.detect
 M.validate_root = manifest.validate_root
-M.decode_manifest = manifest.decode
-M.validate_manifest = manifest.validate
 
 function M.tasks_path(root)
   return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
 end
 
-function M.ensure_gitignore(root)
+local function ensure_gitignore(root)
   local path = vim.fs.joinpath(root, ".gitignore")
   local lines = {}
   if vim.fn.filereadable(path) == 1 then
@@ -136,7 +133,7 @@ function M.load_tasks(root)
   return data, decode_error, true
 end
 
-function M.command_path(root, command)
+local function command_path(root, command)
   if type(command) ~= "table" or type(command[1]) ~= "string" then
     return nil
   end
@@ -166,7 +163,7 @@ function M.test_candidates(root)
   return candidates
 end
 
-function M.has_test_files(root)
+local function has_test_files(root)
   for _, directory in ipairs({ "test", "tests", "spec", "specs" }) do
     if #vim.fn.globpath(root, "**/" .. directory, false, true) > 0 then
       return true
@@ -187,7 +184,7 @@ function M.test_state(root)
 
   local definition = data.tasks.test
   if definition then
-    local path = M.command_path(root, definition.command)
+    local path = command_path(root, definition.command)
     if path then
       return {
         kind = "configured",
@@ -215,7 +212,7 @@ function M.test_state(root)
       tasks_exists = tasks_exists,
     }
   end
-  if M.has_test_files(root) then
+  if has_test_files(root) then
     return {
       kind = "unaggregated",
       label = "tests found, no aggregate runner",
@@ -248,7 +245,7 @@ local function validation_command(root)
   return { executable, "plugin", "validate", root }
 end
 
-function M.external_validate(root)
+local function external_validate(root)
   local command, command_error = validation_command(root)
   if not command then
     return nil, command_error
@@ -308,7 +305,7 @@ function M.initialize(root, opts)
   if not info then
     return nil, validation_error
   end
-  local validator = opts.validator or M.external_validate
+  local validator = opts.validator or external_validate
   local valid, external_error = validator(info.root)
   if not valid then
     return nil, external_error
@@ -347,7 +344,7 @@ function M.initialize(root, opts)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
   end
-  local _, _, ignore_error = M.ensure_gitignore(info.root)
+  local _, _, ignore_error = ensure_gitignore(info.root)
   if ignore_error then
     return nil, ignore_error
   end

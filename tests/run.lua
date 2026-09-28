@@ -1,5 +1,6 @@
 local config = require("omarchy_plugin_dev.config")
 local project = require("omarchy_plugin_dev.project")
+local task_specs = require("omarchy_plugin_dev.task_specs")
 local tasks = require("omarchy_plugin_dev.tasks")
 
 local temp_root = vim.fn.tempname()
@@ -83,6 +84,25 @@ local nested = vim.fs.joinpath(root, "nested")
 vim.fn.mkdir(nested, "p")
 local qml_path = vim.fs.joinpath(nested, "View.qml")
 write(qml_path, { "import QtQuick", "Item {}" })
+local qml_js_path = vim.fs.joinpath(nested, "PanelModel.js")
+write(qml_js_path, { ".pragma library", "function value() { return 1 }" })
+local regular_js_path = vim.fs.joinpath(nested, "browser.js")
+write(regular_js_path, { "export const value = 1" })
+
+local filetype = require("omarchy_plugin_dev.filetype")
+assert(
+  vim.treesitter.language.get_lang("qmljs") == "javascript",
+  "QML JavaScript was not mapped to the JavaScript parser"
+)
+assert(filetype.detect(qml_js_path) == "qmljs", "QML JavaScript was not detected")
+assert(filetype.detect(regular_js_path) == nil, "ordinary JavaScript was claimed")
+local qml_js_buf = vim.fn.bufadd(qml_js_path)
+vim.fn.bufload(qml_js_buf)
+assert(
+  vim.filetype.match({ filename = qml_js_path, buf = qml_js_buf }) == "qmljs",
+  "registered QML JavaScript filetype did not match"
+)
+vim.api.nvim_buf_delete(qml_js_buf, { force = true })
 
 local detected = assert(project.detect(qml_path))
 assert(detected.root == project.canonical(root), "project root detection used the wrong root")
@@ -202,30 +222,112 @@ assert(
 )
 assert(async_validation_result == false, "failed official validation was reported as successful")
 assert(async_validation_error == "validation failed", "official validation failure was unclear")
+assert(config.setup().format_on_save, "QML format-on-save is not enabled by default")
+local valid_format_option, format_option_error = pcall(config.setup, { format_on_save = "yes" })
+assert(not valid_format_option, "invalid format_on_save configuration was accepted")
+assert(
+  tostring(format_option_error):find("format_on_save must be a boolean", 1, true),
+  "invalid format_on_save configuration produced an unclear error"
+)
 config.setup()
 
 local fake_shell_root = vim.fs.joinpath(temp_root, "fake shell")
 write(vim.fs.joinpath(fake_shell_root, "shell.qml"), { "import QtQuick", "Item {}" })
-write(vim.fs.joinpath(fake_shell_root, "Commons", "qmldir"), { "module qs.Commons" })
+write(vim.fs.joinpath(fake_shell_root, "Commons", "qmldir"), {
+  "module qs.Commons",
+  "singleton Style 1.0 Style.qml",
+})
+local fake_style = vim.fs.joinpath(fake_shell_root, "Commons", "Style.qml")
+write(fake_style, {
+  "pragma Singleton",
+  "import QtQuick",
+  "QtObject {",
+  "  readonly property QtObject spacing: QtObject {",
+  "    readonly property int controlHeight: 28",
+  "  }",
+  "}",
+})
 local qml_cache_root = vim.fs.joinpath(temp_root, "qml cache")
 config.setup({ qml_import_paths = { fake_shell_root } })
 local qml_import_paths, qml_import_error = require("omarchy_plugin_dev.qml").import_paths({
   cache_root = qml_cache_root,
+  qt_qml_queries = {},
 })
 assert(qml_import_error == nil, "QML import bridge failed: " .. tostring(qml_import_error))
 assert(#qml_import_paths == 2, "QML import bridge changed the resolved path count")
+local bridged_shell = vim.fs.joinpath(qml_import_paths[1], "qs", "shell.qml")
 assert(
-  vim.uv.fs_realpath(vim.fs.joinpath(qml_import_paths[1], "qs"))
-    == project.canonical(fake_shell_root),
+  vim.uv.fs_realpath(bridged_shell)
+    == project.canonical(vim.fs.joinpath(fake_shell_root, "shell.qml")),
   "QML import bridge does not expose the Quickshell root as qs"
+)
+local bridged_style = vim.fs.joinpath(qml_import_paths[1], "qs", "Commons", "Style.qml")
+local bridged_style_text = table.concat(vim.fn.readfile(bridged_style), "\n")
+assert(
+  bridged_style_text:find("readonly property alias spacing", 1, true),
+  "QML import bridge did not expose grouped object types"
+)
+assert(
+  table.concat(vim.fn.readfile(fake_style), "\n"):find("property QtObject spacing", 1, true),
+  "QML import bridge modified the configured shell"
 )
 assert(
   qml_import_paths[2] == vim.fs.normalize(fake_shell_root),
   "configured QML import path was not preserved"
 )
+
+local valid_qml = vim.fs.joinpath(root, "ValidStyle.qml")
+write(valid_qml, {
+  "import QtQuick",
+  "import qs.Commons",
+  "Item { property int rowHeight: Style.spacing.controlHeight }",
+})
+local qml_lint = assert(require("omarchy_plugin_dev.qmllint").resolve())
+local valid_lint = vim
+  .system({ qml_lint.path, "-I", qml_import_paths[1], valid_qml }, { text = true })
+  :wait()
+local valid_lint_output = (valid_lint.stdout or "") .. (valid_lint.stderr or "")
+assert(
+  not valid_lint_output:find('Member "controlHeight" not found', 1, true),
+  "QML import bridge left valid grouped properties unresolved"
+)
+
+local invalid_qml = vim.fs.joinpath(root, "InvalidStyle.qml")
+write(invalid_qml, {
+  "import QtQuick",
+  "import qs.Commons",
+  "Item { property int rowHeight: Style.spacing.controlHeigt }",
+})
+local invalid_lint = vim
+  .system({ qml_lint.path, "-I", qml_import_paths[1], invalid_qml }, { text = true })
+  :wait()
+local invalid_lint_output = (invalid_lint.stdout or "") .. (invalid_lint.stderr or "")
+assert(
+  invalid_lint_output:find('Member "controlHeigt" not found', 1, true),
+  "QML import bridge hid a misspelled grouped property"
+)
+
+local fake_qt_qml = vim.fs.joinpath(temp_root, "fake Qt", "qml")
+vim.fn.mkdir(fake_qt_qml, "p")
+local fake_qmake = vim.fs.joinpath(temp_root, "fake qmake6")
+write(fake_qmake, {
+  "#!/bin/sh",
+  "printf '%s\\n' \"$FAKE_QT_QML\"",
+})
+make_executable(fake_qmake)
+vim.env.FAKE_QT_QML = fake_qt_qml
+local discovered_qml_paths = require("omarchy_plugin_dev.qml").import_paths({
+  cache_root = qml_cache_root,
+  qt_qml_queries = { { fake_qmake, "-query", "QT_INSTALL_QML" } },
+})
+assert(
+  discovered_qml_paths[1] == vim.fs.normalize(fake_qt_qml),
+  "Qt's QML import path was not discovered"
+)
+vim.env.FAKE_QT_QML = nil
 config.setup()
 
-local check_spec = assert(tasks.check_spec(project.canonical(root)))
+local check_spec = assert(task_specs.check(project.canonical(root)))
 assert(check_spec.cwd == project.canonical(root), "check task cwd is wrong")
 local validate_step = check_spec.strategy.tasks[1]
 assert(
@@ -242,22 +344,35 @@ local lint_info = assert(require("omarchy_plugin_dev.qmllint").resolve())
 assert(lint_info.major >= 6, "automatic qmllint resolution selected a pre-Qt-6 executable")
 assert(lint_step.cmd[1] == lint_info.path, "lint task does not use the resolved Qt 6 qmllint")
 assert(lint_step.cmd[2] == "-I", "lint task lost the import flag")
+assert(vim.tbl_contains(lint_step.cmd, qml_js_path), "lint task omitted QML JavaScript")
 assert(
-  vim.uv.fs_realpath(vim.fs.joinpath(lint_step.cmd[3], "qs"))
-    == vim.uv.fs_realpath("/usr/share/omarchy/shell"),
-  "lint task lost the qs namespace bridge"
+  not vim.tbl_contains(lint_step.cmd, regular_js_path),
+  "lint task included ordinary JavaScript"
 )
-assert(
-  lint_step.cmd[4] == "-I" and lint_step.cmd[5] == "/usr/share/omarchy/shell",
-  "lint task lost direct Omarchy imports"
-)
+local lint_import_paths = {}
+for index, argument in ipairs(lint_step.cmd) do
+  if argument == "-I" then
+    lint_import_paths[#lint_import_paths + 1] = lint_step.cmd[index + 1]
+  end
+end
+assert(vim.tbl_contains(lint_import_paths, "/usr/share/omarchy/shell"), "lint lost Omarchy imports")
+local has_qs_bridge = false
+for _, import_path in ipairs(lint_import_paths) do
+  if
+    vim.uv.fs_realpath(vim.fs.joinpath(import_path, "qs", "shell.qml"))
+    == vim.uv.fs_realpath("/usr/share/omarchy/shell/shell.qml")
+  then
+    has_qs_bridge = true
+  end
+end
+assert(has_qs_bridge, "lint task lost the qs namespace bridge")
 assert(
   lint_step.components[1].set_diagnostics == false,
   "lint task still duplicates language-server diagnostics"
 )
 assert(lint_step.cwd == project.canonical(root), "lint task cwd is wrong")
 
-local test_spec = assert(tasks.test_spec(project.canonical(root)))
+local test_spec = assert(task_specs.test(project.canonical(root)))
 assert(
   vim.deep_equal(test_spec.cmd, { vim.fs.joinpath(project.canonical(root), "scripts", "test") }),
   "relative test executable was not anchored to the project root"
@@ -266,7 +381,7 @@ assert(test_spec.cwd == project.canonical(root), "test task cwd is wrong")
 
 local no_test_root = vim.fs.joinpath(temp_root, "plugin without tests")
 create_project(no_test_root)
-local missing_test_rebuild, missing_test_error = tasks.rebuild_spec(project.canonical(no_test_root))
+local missing_test_rebuild, missing_test_error = task_specs.rebuild(project.canonical(no_test_root))
 assert(missing_test_rebuild == nil, "test-and-build accepted a missing test task")
 assert(
   missing_test_error and missing_test_error:find("No test task is configured", 1, true),
@@ -277,11 +392,11 @@ config.setup({
     rebuild = { cmd = { "/bin/true" }, name = "Custom rebuild" },
   },
 })
-local custom_rebuild = assert(tasks.rebuild_spec(project.canonical(no_test_root)))
+local custom_rebuild = assert(task_specs.rebuild(project.canonical(no_test_root)))
 assert(vim.deep_equal(custom_rebuild.cmd, { "/bin/true" }), "custom rebuild override was ignored")
 config.setup({ tasks = { rebuild = { name = "Partial rebuild override" } } })
 assert(
-  tasks.rebuild_spec(project.canonical(no_test_root)) == nil,
+  task_specs.rebuild(project.canonical(no_test_root)) == nil,
   "partial rebuild override bypassed the required test"
 )
 local function_default
@@ -294,12 +409,12 @@ config.setup({
     end,
   },
 })
-local function_rebuild = assert(tasks.rebuild_spec(project.canonical(root)))
+local function_rebuild = assert(task_specs.rebuild(project.canonical(root)))
 assert(function_default ~= nil, "rebuild function override lost its default spec")
 assert(function_rebuild.name == "Function rebuild", "rebuild function override was not applied")
 config.setup()
 
-local hot_reload_spec = assert(tasks.hot_reload_spec(project.canonical(root)))
+local hot_reload_spec = assert(task_specs.hot_reload(project.canonical(root)))
 local hot_reload_steps = hot_reload_spec.strategy.tasks
 assert(#hot_reload_steps == 3, "build should check, deploy, and restart exactly once")
 assert(
@@ -307,11 +422,31 @@ assert(
   "build does not use the staged deployment helper"
 )
 assert(
+  vim.tbl_contains(hot_reload_steps[2].cmd, "--enable-auto"),
+  "build does not enable each deployment by default"
+)
+assert(
+  vim.tbl_contains(hot_reload_steps[2].cmd, "--enable-first-install"),
+  "build does not enable a first installation by default"
+)
+assert(
   vim.deep_equal(hot_reload_steps[3].cmd, { "omarchy", "restart", "shell" }),
   "build does not expose the shell restart as an Overseer step"
 )
 
-local rebuild_spec = assert(tasks.rebuild_spec(project.canonical(root)))
+config.setup({ enable_auto = false, enable_first_install = false })
+local disabled_enable_spec = assert(task_specs.hot_reload(project.canonical(root)))
+assert(
+  not vim.tbl_contains(disabled_enable_spec.strategy.tasks[2].cmd, "--enable-auto"),
+  "disabled automatic enabling remained in the deploy command"
+)
+assert(
+  not vim.tbl_contains(disabled_enable_spec.strategy.tasks[2].cmd, "--enable-first-install"),
+  "disabled first-install enabling remained in the deploy command"
+)
+config.setup()
+
+local rebuild_spec = assert(task_specs.rebuild(project.canonical(root)))
 local rebuild_steps = rebuild_spec.strategy.tasks
 local restart_count = 0
 for _, step in ipairs(rebuild_steps) do
@@ -332,6 +467,12 @@ assert(
 config.setup()
 local lsp = require("omarchy_plugin_dev.lsp")
 assert(lsp.executable(), "installed canonical qmlls was not discovered")
+local lsp_setup, lsp_setup_error = lsp.setup()
+assert(lsp_setup, lsp_setup_error)
+assert(
+  vim.tbl_contains(vim.lsp.config[lsp.name].cmd, "--no-cmake-calls"),
+  "qmlls still performs irrelevant CMake discovery"
+)
 if vim.fn.executable("/usr/lib/qt6/bin/qmlls") == 1 then
   assert(
     lsp.executable() == "/usr/lib/qt6/bin/qmlls",
@@ -387,14 +528,22 @@ config.setup()
 
 local project_buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_set_current_buf(project_buf)
-vim.api.nvim_buf_set_name(project_buf, qml_path)
+vim.api.nvim_buf_set_name(project_buf, qml_js_path)
+vim.api.nvim_buf_set_lines(
+  project_buf,
+  0,
+  -1,
+  false,
+  { ".pragma library", "function value() { return 1 }" }
+)
 require("omarchy_plugin_dev.mappings").detach(project_buf)
 vim.keymap.set("n", "<localleader>b", "<cmd>let g:user_mapping_ran = 1<cr>", {
   buffer = project_buf,
   desc = "User conflict",
 })
-vim.bo[project_buf].filetype = "qml"
+vim.bo[project_buf].filetype = "javascript"
 require("omarchy_plugin_dev").attach(project_buf)
+assert(vim.bo[project_buf].filetype == "qmljs", "QML JavaScript filetype was not repaired")
 assert(mapping_by_desc(project_buf, "User conflict"), "existing mapping was overwritten")
 assert(
   not mapping_by_desc(project_buf, "Omarchy Plugin: check"),
@@ -428,11 +577,24 @@ local original_diagnostic_reset = vim.diagnostic.reset
 local original_get_namespace = vim.lsp.diagnostic.get_namespace
 local detached_clients = {}
 local reset_namespaces = {}
+local stopped_clients = {}
+local function fake_client(id, name, attached_buffers)
+  return {
+    id = id,
+    name = name,
+    namespace = id + 54,
+    attached_buffers = attached_buffers,
+    stop = function()
+      stopped_clients[#stopped_clients + 1] = id
+    end,
+  }
+end
 vim.lsp.get_clients = function(opts)
   assert(opts.bufnr == project_buf, "LSP ownership queried the wrong buffer")
   return {
-    { id = 17, name = "qmlls", namespace = 71 },
-    { id = 18, name = "omarchy_plugin_dev", namespace = 72 },
+    fake_client(17, "qmlls", { [project_buf] = true }),
+    fake_client(18, "omarchy_plugin_dev", { [project_buf] = true }),
+    fake_client(19, "vtsls", { [project_buf] = true, [999] = true }),
   }
 end
 vim.lsp.buf_detach_client = function(bufnr, client_id)
@@ -447,8 +609,9 @@ vim.diagnostic.reset = function(namespace, bufnr)
   reset_namespaces[#reset_namespaces + 1] = namespace
 end
 assert(lsp.claim(project_buf), "detected project buffer did not claim QML server ownership")
-assert(vim.deep_equal(detached_clients, { 17 }), "project detached the wrong QML client")
-assert(vim.deep_equal(reset_namespaces, { 71 }), "generic QML diagnostics were not cleared")
+assert(vim.deep_equal(detached_clients, { 17, 19 }), "project detached the wrong language clients")
+assert(vim.deep_equal(reset_namespaces, { 71, 73 }), "competing diagnostics were not cleared")
+assert(vim.deep_equal(stopped_clients, { 17 }), "unused language clients were not stopped")
 config.setup({
   executables = { qml_language_server = "definitely-missing-qml-language-server" },
 })
@@ -461,6 +624,54 @@ vim.lsp.buf_detach_client = original_detach_client
 vim.lsp.diagnostic.get_namespace = original_get_namespace
 vim.diagnostic.reset = original_diagnostic_reset
 
+local format_buf = vim.fn.bufadd(qml_path)
+vim.fn.bufload(format_buf)
+vim.bo[format_buf].filetype = "qml"
+vim.bo[format_buf].expandtab = false
+vim.bo[format_buf].shiftwidth = 2
+vim.bo[format_buf].softtabstop = 2
+vim.bo[format_buf].tabstop = 2
+vim.b[format_buf].autoformat = true
+assert(require("omarchy_plugin_dev").attach(format_buf), "detected QML buffer did not attach")
+assert(vim.bo[format_buf].expandtab, "detected QML buffer still indents with tabs")
+assert(vim.bo[format_buf].shiftwidth == 4, "detected QML buffer shiftwidth is not four")
+assert(vim.bo[format_buf].softtabstop == 4, "detected QML buffer softtabstop is not four")
+assert(vim.bo[format_buf].tabstop == 4, "detected QML buffer tabstop is not four")
+assert(vim.b[format_buf].autoformat == false, "editor-wide formatting was not disabled")
+assert(
+  #vim.api.nvim_get_autocmds({ group = "OmarchyPluginDevFormat", buffer = format_buf }) == 1,
+  "detected QML buffer has no project format-on-save hook"
+)
+
+local original_lsp_format = vim.lsp.buf.format
+original_get_clients = vim.lsp.get_clients
+local format_request
+vim.lsp.get_clients = function(opts)
+  assert(opts.bufnr == format_buf, "formatting queried the wrong buffer")
+  assert(opts.name == lsp.name, "formatting queried the wrong language server")
+  return { { id = 23, name = lsp.name } }
+end
+vim.lsp.buf.format = function(opts)
+  format_request = opts
+end
+vim.api.nvim_exec_autocmds("BufWritePre", { buffer = format_buf })
+assert(format_request, "saving detected QML did not request formatting")
+assert(format_request.bufnr == format_buf, "format request targeted the wrong buffer")
+assert(format_request.id == 23, "format request targeted the wrong language client")
+assert(format_request.async == false, "format-on-save must finish before writing")
+vim.lsp.get_clients = original_get_clients
+vim.lsp.buf.format = original_lsp_format
+
+config.setup({ format_on_save = false })
+assert(require("omarchy_plugin_dev").attach(format_buf), "QML buffer failed to reattach")
+assert(
+  #vim.api.nvim_get_autocmds({ group = "OmarchyPluginDevFormat", buffer = format_buf }) == 0,
+  "format_on_save=false left the save hook enabled"
+)
+assert(vim.bo[format_buf].shiftwidth == 4, "format opt-out changed QML indentation")
+config.setup()
+vim.api.nvim_buf_delete(format_buf, { force = true })
+
 for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
   assert(
     not mapping.desc or not mapping.desc:find("Omarchy Plugin:", 1, true),
@@ -471,7 +682,11 @@ end
 vim.cmd.edit(vim.fn.fnameescape(vim.fs.joinpath(unrelated, "View.qml")))
 vim.bo.filetype = "qml"
 local unrelated_buf = vim.api.nvim_get_current_buf()
+vim.bo[unrelated_buf].shiftwidth = 2
+vim.b[unrelated_buf].autoformat = true
 require("omarchy_plugin_dev").attach(unrelated_buf)
+assert(vim.bo[unrelated_buf].shiftwidth == 2, "unrelated QML indentation was changed")
+assert(vim.b[unrelated_buf].autoformat == true, "unrelated QML formatting was changed")
 assert(
   not mapping_by_desc(unrelated_buf, "Omarchy Plugin: test"),
   "unrelated QML buffer received project mappings"
