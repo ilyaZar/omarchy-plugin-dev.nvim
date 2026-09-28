@@ -80,17 +80,50 @@ local function finalize(spec, root, action, default_name)
   return spec
 end
 
+local function git_source_files(root)
+  local executable = vim.fn.exepath("git")
+  if executable == "" then
+    return nil
+  end
+  local result = vim
+    .system({
+      executable,
+      "-C",
+      root,
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "*.qml",
+      "*.js",
+    }, { text = true })
+    :wait(3000)
+  if result.code ~= 0 then
+    return nil
+  end
+  return vim.tbl_map(function(path)
+    return vim.fs.joinpath(root, path)
+  end, vim.split(result.stdout or "", "\0", { plain = true, trimempty = true }))
+end
+
+local function source_files(root)
+  local files = git_source_files(root)
+  if files then
+    return files
+  end
+  files = vim.fn.globpath(root, "**/*.qml", false, true)
+  vim.list_extend(files, vim.fn.globpath(root, "**/*.js", false, true))
+  return files
+end
+
 local function qml_files(root)
   local info = assert(project.validate_root(root))
   local files = {}
-  for _, path in ipairs(vim.fn.globpath(root, "**/*.qml", false, true)) do
-    if project.includes(path, info) then
-      files[#files + 1] = path
-    end
-  end
-  for _, path in ipairs(vim.fn.globpath(root, "**/*.js", false, true)) do
+  for _, path in ipairs(source_files(root)) do
     if
-      require("omarchy_plugin_dev.filetype").is_qml_javascript(path)
+      (path:match("%.qml$") or require("omarchy_plugin_dev.filetype").is_qml_javascript(path))
       and project.includes(path, info)
     then
       files[#files + 1] = path

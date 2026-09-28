@@ -90,6 +90,11 @@ local qml_js_path = vim.fs.joinpath(nested, "PanelModel.js")
 write(qml_js_path, { ".pragma library", "function value() { return 1 }" })
 local regular_js_path = vim.fs.joinpath(nested, "browser.js")
 write(regular_js_path, { "export const value = 1" })
+local ignored_qml_path = vim.fs.joinpath(root, "ignored", "Evidence.qml")
+write(ignored_qml_path, { "import QtQuick", "Item {}" })
+write(vim.fs.joinpath(root, ".gitignore"), { "/ignored/" })
+local git_init = vim.system({ "git", "-C", root, "init", "--quiet" }, { text = true }):wait()
+assert(git_init.code == 0, "temporary Git project was not initialized: " .. (git_init.stderr or ""))
 
 local filetype = require("omarchy_plugin_dev.filetype")
 assert(
@@ -288,6 +293,23 @@ write(fake_style, {
   "  }",
   "}",
 })
+write(vim.fs.joinpath(fake_shell_root, "Ui", "qmldir"), {
+  "module qs.Ui",
+  "Panel 1.0 Panel.qml",
+  "PluginBarApi 1.0 PluginBarApi.qml",
+})
+write(vim.fs.joinpath(fake_shell_root, "Ui", "Panel.qml"), {
+  "import QtQuick",
+  "Item { property QtObject bar: null }",
+})
+write(vim.fs.joinpath(fake_shell_root, "Ui", "PluginBarApi.qml"), {
+  "import QtQuick",
+  "QtObject {",
+  '  property color foreground: "transparent"',
+  "  property var shell: null",
+  "  function hideTooltip(target) {}",
+  "}",
+})
 local qml_cache_root = vim.fs.joinpath(temp_root, "qml cache")
 config.setup({ qml_import_paths = { fake_shell_root } })
 local qml_import_paths, qml_import_error = require("omarchy_plugin_dev.qml").import_paths({
@@ -311,6 +333,13 @@ assert(
 assert(
   table.concat(vim.fn.readfile(fake_style), "\n"):find("property QtObject spacing", 1, true),
   "QML import bridge modified the configured shell"
+)
+local bridged_panel = vim.fs.joinpath(qml_import_paths[1], "qs", "Ui", "Panel.qml")
+assert(
+  table
+    .concat(vim.fn.readfile(bridged_panel), "\n")
+    :find("property PluginBarApi bar: null", 1, true),
+  "QML import bridge did not expose the documented bar host type"
 )
 assert(
   qml_import_paths[2] == vim.fs.normalize(fake_shell_root),
@@ -346,6 +375,41 @@ local invalid_lint_output = (invalid_lint.stdout or "") .. (invalid_lint.stderr 
 assert(
   invalid_lint_output:find('Member "controlHeigt" not found', 1, true),
   "QML import bridge hid a misspelled grouped property"
+)
+
+local valid_panel_qml = vim.fs.joinpath(root, "ValidPanel.qml")
+write(valid_panel_qml, {
+  "import QtQuick",
+  "import qs.Ui",
+  "Panel {",
+  "  property color hostForeground: bar ? bar.foreground : 'transparent'",
+  "  property var hostShell: bar ? bar.shell : null",
+  "  function hideHostTooltip() { if (bar) bar.hideTooltip(this) }",
+  "}",
+})
+local valid_panel_lint = vim
+  .system({ qml_lint.path, "-I", qml_import_paths[1], valid_panel_qml }, { text = true })
+  :wait()
+local valid_panel_output = (valid_panel_lint.stdout or "") .. (valid_panel_lint.stderr or "")
+assert(
+  not valid_panel_output:find('Member "foreground" not found', 1, true)
+    and not valid_panel_output:find('Member "shell" not found', 1, true)
+    and not valid_panel_output:find('Member "hideTooltip" not found', 1, true),
+  "QML import bridge left documented bar host members unresolved"
+)
+local invalid_panel_qml = vim.fs.joinpath(root, "InvalidPanel.qml")
+write(invalid_panel_qml, {
+  "import QtQuick",
+  "import qs.Ui",
+  "Panel { property var invalidHostMember: bar ? bar.foregroun : null }",
+})
+local invalid_panel_lint = vim
+  .system({ qml_lint.path, "-I", qml_import_paths[1], invalid_panel_qml }, { text = true })
+  :wait()
+local invalid_panel_output = (invalid_panel_lint.stdout or "") .. (invalid_panel_lint.stderr or "")
+assert(
+  invalid_panel_output:find('Member "foregroun" not found', 1, true),
+  "QML import bridge hid a misspelled bar host member"
 )
 
 local fake_qt_qml = vim.fs.joinpath(temp_root, "fake Qt", "qml")
@@ -393,6 +457,10 @@ assert(vim.tbl_contains(lint_step.cmd, qml_js_path), "lint task omitted QML Java
 assert(
   not vim.tbl_contains(lint_step.cmd, excluded_qml_path),
   "lint task included QML rejected by the ownership filter"
+)
+assert(
+  not vim.tbl_contains(lint_step.cmd, ignored_qml_path),
+  "lint task included a Git-ignored QML artifact"
 )
 assert(
   not vim.tbl_contains(lint_step.cmd, regular_js_path),
@@ -630,12 +698,29 @@ local deferred_cleanups = {}
 local detached_clients = {}
 local reset_namespaces = {}
 local stopped_clients = {}
+local terminated_clients = {}
+local function run_deferred(delay)
+  local pending = deferred_cleanups
+  deferred_cleanups = {}
+  for _, deferred in ipairs(pending) do
+    if deferred.delay == delay then
+      deferred.callback()
+    else
+      deferred_cleanups[#deferred_cleanups + 1] = deferred
+    end
+  end
+end
 local function fake_client(id, name, attached_buffers)
   return {
     id = id,
     name = name,
     namespace = id + 54,
     attached_buffers = attached_buffers,
+    rpc = {
+      terminate = function()
+        terminated_clients[#terminated_clients + 1] = id
+      end,
+    },
     stop = function()
       stopped_clients[#stopped_clients + 1] = id
     end,
@@ -671,8 +756,8 @@ vim.diagnostic.reset = function(namespace, bufnr)
   reset_namespaces[#reset_namespaces + 1] = namespace
 end
 vim.defer_fn = function(callback, delay)
-  assert(delay == 100, "competing-client cleanup used an unexpected delay")
-  deferred_cleanups[#deferred_cleanups + 1] = callback
+  assert(delay == 100 or delay == 1000, "competing-client cleanup used an unexpected delay")
+  deferred_cleanups[#deferred_cleanups + 1] = { callback = callback, delay = delay }
 end
 config.setup({
   qml_file_filter = function(context)
@@ -687,12 +772,16 @@ assert(vim.deep_equal(detached_clients, { 17, 19 }), "project detached the wrong
 assert(vim.deep_equal(reset_namespaces, { 71, 73 }), "competing diagnostics were not cleared")
 assert(#deferred_cleanups == 2, "competing clients were not checked after attachment settled")
 generic_qml_client.attached_buffers[998] = nil
-for _, cleanup in ipairs(deferred_cleanups) do
-  cleanup()
-end
+run_deferred(100)
 assert(
   vim.deep_equal(stopped_clients, { 17 }),
   "unused language client was not stopped after deferred attachment cleanup"
+)
+assert(#deferred_cleanups == 1, "unused client did not schedule forced process cleanup")
+run_deferred(1000)
+assert(
+  vim.deep_equal(terminated_clients, { 17 }),
+  "unused language client process was not terminated after the grace period"
 )
 detached_clients = {}
 reset_namespaces = {}
@@ -701,10 +790,15 @@ assert(lsp.release(project_buf), "excluded buffer did not release the project-aw
 assert(vim.deep_equal(detached_clients, { 18 }), "release detached the wrong language client")
 assert(vim.deep_equal(reset_namespaces, { 72 }), "release left project diagnostics behind")
 assert(#deferred_cleanups == 1, "released project client was not checked after detachment")
-deferred_cleanups[1]()
+run_deferred(100)
 assert(
   vim.deep_equal(stopped_clients, { 17, 18 }),
   "released project client remained running without another buffer"
+)
+run_deferred(1000)
+assert(
+  vim.deep_equal(terminated_clients, { 17, 18 }),
+  "released project process survived forced cleanup"
 )
 config.setup({
   executables = { qml_language_server = "definitely-missing-qml-language-server" },

@@ -1,6 +1,6 @@
 local M = {}
 
-local bridge_version = "2"
+local bridge_version = "3"
 local qt_qml_queries = {
   { "qtpaths6", "--query", "QT_INSTALL_QML" },
   { "qmake6", "-query", "QT_INSTALL_QML" },
@@ -47,14 +47,20 @@ local function source_signature(shell_root)
   for _, name in ipairs(entries(shell_root)) do
     parts[#parts + 1] = name
   end
-  local commons = vim.fs.joinpath(shell_root, "Commons")
-  for _, name in ipairs(entries(commons)) do
-    local path = vim.fs.joinpath(commons, name)
-    local stat = vim.uv.fs_stat(path)
-    parts[#parts + 1] =
-      table.concat({ name, stat and stat.type or "missing", stat and stat.size or 0 }, ":")
-    if stat and stat.type == "file" then
-      parts[#parts + 1] = vim.fn.sha256(table.concat(vim.fn.readfile(path, "b"), "\n"))
+  for _, module in ipairs({ "Commons", "Ui" }) do
+    local module_root = vim.fs.joinpath(shell_root, module)
+    if vim.fn.isdirectory(module_root) == 1 then
+      for _, name in ipairs(entries(module_root)) do
+        local path = vim.fs.joinpath(module_root, name)
+        local stat = vim.uv.fs_stat(path)
+        parts[#parts + 1] = table.concat(
+          { module, name, stat and stat.type or "missing", stat and stat.size or 0 },
+          ":"
+        )
+        if stat and stat.type == "file" then
+          parts[#parts + 1] = vim.fn.sha256(table.concat(vim.fn.readfile(path, "b"), "\n"))
+        end
+      end
     end
   end
   return vim.fn.sha256(table.concat(parts, "\n"))
@@ -80,19 +86,24 @@ local function link(source, target)
 end
 
 -- Static aliases let qmllint inspect properties on grouped QtObjects.
-local function tooling_lines(path)
+local function tooling_lines(path, module, name, typed_bar)
   local lines = vim.fn.readfile(path)
   local result = {}
   local changed = false
   for _, line in ipairs(lines) do
-    local indent, name =
+    local indent, property =
       line:match("^(%s*)readonly%s+property%s+QtObject%s+([%w_]+)%s*:%s*QtObject%s*{%s*$")
-    if name then
-      local object_id = "__omarchy_plugin_dev_" .. name
-      result[#result + 1] = indent .. "readonly property alias " .. name .. ": " .. object_id
+    if module == "Commons" and property then
+      local object_id = "__omarchy_plugin_dev_" .. property
+      result[#result + 1] = indent .. "readonly property alias " .. property .. ": " .. object_id
       result[#result + 1] = indent .. "QtObject {"
       result[#result + 1] = indent .. "  id: " .. object_id
       changed = true
+    elseif module == "Ui" and name == "Panel.qml" and typed_bar then
+      local replaced, count =
+        line:gsub("property QtObject bar: null", "property PluginBarApi bar: null")
+      result[#result + 1] = replaced
+      changed = changed or count > 0
     else
       result[#result + 1] = line
     end
@@ -100,13 +111,14 @@ local function tooling_lines(path)
   return result, changed
 end
 
-local function populate_commons(shell_root, alias)
-  local source_root = vim.fs.joinpath(shell_root, "Commons")
-  local target_root = vim.fs.joinpath(alias, "Commons")
+local function populate_module(shell_root, alias, module)
+  local source_root = vim.fs.joinpath(shell_root, module)
+  local target_root = vim.fs.joinpath(alias, module)
   if vim.fn.mkdir(target_root, "p") == -1 then
     return nil, "could not create QML tooling module at " .. target_root
   end
 
+  local typed_bar = vim.fn.filereadable(vim.fs.joinpath(source_root, "PluginBarApi.qml")) == 1
   for _, name in ipairs(entries(source_root)) do
     local source = vim.fs.joinpath(source_root, name)
     local target = vim.fs.joinpath(target_root, name)
@@ -116,7 +128,7 @@ local function populate_commons(shell_root, alias)
         return nil, "could not copy QML module definition to " .. target
       end
     elseif name:match("%.qml$") then
-      local lines, changed = tooling_lines(source)
+      local lines, changed = tooling_lines(source, module, name, typed_bar)
       if changed then
         if vim.fn.writefile(lines, target) ~= 0 then
           return nil, "could not write QML tooling type to " .. target
@@ -143,8 +155,8 @@ local function build_bridge(shell_root, alias)
   end
 
   for _, name in ipairs(entries(shell_root)) do
-    if name == "Commons" then
-      local populated, populate_error = populate_commons(shell_root, alias)
+    if name == "Commons" or name == "Ui" then
+      local populated, populate_error = populate_module(shell_root, alias, name)
       if not populated then
         return nil, populate_error
       end

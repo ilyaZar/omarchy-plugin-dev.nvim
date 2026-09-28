@@ -162,6 +162,10 @@ mappings, and built-in linting to other tooling. Without a callback, ordinary
 files below the plugin root retain the default behavior. The plugin does not
 guess foreign project markers or target layouts.
 
+In a Git working tree, built-in lint discovery includes tracked and new
+nonignored QML sources while leaving ignored artifacts alone. Non-Git projects
+fall back to recursive source discovery.
+
 See `:help omarchy-plugin-dev` for executable overrides, QML import paths, and
 Overseer task overrides.
 
@@ -183,13 +187,15 @@ Detected plugin buffers are owned by the project-aware QML server. If another
 Neovim integration automatically attaches a generic `qmlls`, it is detached
 from those buffers only; ordinary QML projects remain untouched. After
 attachment settles, a detached competing client is stopped only when it owns
-no other buffers. A cache-only
+no other buffers. If graceful shutdown does not end its process, the process is
+terminated after a short grace period. A cache-only
 import bridge exposes the configured Omarchy shell root as `qs`. Qt's QML
 module path is discovered from its Qt 6 tools. This resolves Qt and Omarchy
 imports without adding `.qmlls.ini` or generated files to plugin repositories.
 The bridge gives grouped `Style` and `Color` objects concrete tooling types
-without changing the installed shell, so valid members remain
-quiet while misspellings are still reported. Because ordinary Omarchy plugins
+and exposes the documented `PluginBarApi` type for `Panel.bar` without
+changing the installed shell. Valid host members remain quiet while
+misspellings are still reported. Because ordinary Omarchy plugins
 have no CMake build, the server's automatic CMake discovery is disabled.
 
 Inline diagnostic text is disabled for this server by default because QML
