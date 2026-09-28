@@ -25,8 +25,15 @@ local M = {}
 ---@field mappings? false|table<string, boolean|string>
 ---@field notify? boolean
 ---@field log_level? integer
+---@field qml_file_filter? fun(context: OmarchyPluginDevQmlFileContext): boolean
 ---@field qml_import_paths? string[]
 ---@field tasks? table<string, table|fun(context: table): table?>
+
+---@class OmarchyPluginDevQmlFileContext
+---@field manifest table
+---@field path string
+---@field relative_path string
+---@field root string
 
 ---@class OmarchyPluginDevConfig
 ---@field diagnostics false|table
@@ -38,6 +45,7 @@ local M = {}
 ---@field mappings false|OmarchyPluginDevMappings
 ---@field notify boolean
 ---@field log_level integer
+---@field qml_file_filter? fun(context: OmarchyPluginDevQmlFileContext): boolean
 ---@field qml_import_paths string[]
 ---@field tasks table<string, table|fun(context: table): table?>
 
@@ -100,6 +108,9 @@ local function validate(opts)
     if type(executable) ~= "string" or executable == "" then
       error(string.format("omarchy-plugin-dev.nvim: executables.%s must be a string", name))
     end
+  end
+  if opts.qml_file_filter ~= nil and type(opts.qml_file_filter) ~= "function" then
+    error("omarchy-plugin-dev.nvim: qml_file_filter must be a function")
   end
   if type(opts.qml_import_paths) ~= "table" or not vim.islist(opts.qml_import_paths) then
     error("omarchy-plugin-dev.nvim: qml_import_paths must be an array")

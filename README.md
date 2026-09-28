@@ -154,6 +154,14 @@ its [QML formatter][qmlformat], whose default indentation is four spaces. Set
 Set `mappings = false` to disable every default mapping. Individual mappings
 also accept `false`.
 
+Mixed repositories can set `qml_file_filter` to decide whether a QML or QML
+JavaScript file belongs to the detected Omarchy plugin. The callback receives
+`path`, `relative_path`, `root`, and a copy of the validated `manifest`, and
+must return a boolean. Returning `false` leaves that file's LSP, formatting,
+mappings, and built-in linting to other tooling. Without a callback, ordinary
+files below the plugin root retain the default behavior. The plugin does not
+guess foreign project markers or target layouts.
+
 See `:help omarchy-plugin-dev` for executable overrides, QML import paths, and
 Overseer task overrides.
 
@@ -173,7 +181,9 @@ as-is. For language features it prefers the system Qt `qmlls`, then checks
 
 Detected plugin buffers are owned by the project-aware QML server. If another
 Neovim integration automatically attaches a generic `qmlls`, it is detached
-from those buffers only; ordinary QML projects remain untouched. A cache-only
+from those buffers only; ordinary QML projects remain untouched. After
+attachment settles, a detached competing client is stopped only when it owns
+no other buffers. A cache-only
 import bridge exposes the configured Omarchy shell root as `qs`. Qt's QML
 module path is discovered from its Qt 6 tools. This resolves Qt and Omarchy
 imports without adding `.qmlls.ini` or generated files to plugin repositories.

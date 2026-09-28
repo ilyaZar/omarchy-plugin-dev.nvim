@@ -140,17 +140,27 @@ false to disable defaults. Executable names, QML import paths, notifications,
 and Overseer task definitions are configurable. Setup and commands remain
 available without mappings.
 
+For a repository containing more than one QML target, qml_file_filter may be
+a function that decides whether a file belongs to the detected Omarchy plugin.
+It receives a table containing path, relative_path, root, and a copy of the
+validated manifest. It must return a boolean. Returning false leaves that
+file's LSP, formatting, mappings, and built-in linting untouched. Without the
+callback, ordinary descendants of the plugin root retain the default behavior.
+The plugin does not infer foreign project markers or target layouts.
+
 The qmllint value "auto" prefers /usr/lib/qt6/bin/qmllint and accepts a PATH
 candidate only when it reports Qt 6 or newer. An explicit override is honored
 as-is. The dashboard shows the selected path and version.
 
 The QML language server prefers the system Qt qmlls, then PATH and Mason. A
 generic qmlls attached by another Neovim integration is detached only from
-detected Omarchy Plugin buffers. The project-aware server resolves qs.*
-imports through a generated cache bridge and discovers Qt's QML module path
-from its Qt 6 tools. The bridge supplies tooling types for grouped Style and
-Color properties without changing the installed shell. Automatic CMake
-discovery is disabled because ordinary Omarchy plugins have no CMake build.
+detected Omarchy Plugin buffers. After attachment settles, a detached client
+is stopped only when it owns no other buffers. The project-aware server
+resolves qs.* imports through a generated cache bridge and discovers Qt's QML
+module path from its Qt 6 tools. The bridge supplies tooling types for grouped
+Style and Color properties without changing the installed shell. Automatic
+CMake discovery is disabled because ordinary Omarchy plugins have no CMake
+build.
 The plugin does not write .qmlls.ini or other tooling files into the project.
 
 Inline diagnostic text is disabled for this server by default because qmlls

@@ -81,9 +81,18 @@ local function finalize(spec, root, action, default_name)
 end
 
 local function qml_files(root)
-  local files = vim.fn.globpath(root, "**/*.qml", false, true)
+  local info = assert(project.validate_root(root))
+  local files = {}
+  for _, path in ipairs(vim.fn.globpath(root, "**/*.qml", false, true)) do
+    if project.includes(path, info) then
+      files[#files + 1] = path
+    end
+  end
   for _, path in ipairs(vim.fn.globpath(root, "**/*.js", false, true)) do
-    if require("omarchy_plugin_dev.filetype").is_qml_javascript(path) then
+    if
+      require("omarchy_plugin_dev.filetype").is_qml_javascript(path)
+      and project.includes(path, info)
+    then
       files[#files + 1] = path
     end
   end

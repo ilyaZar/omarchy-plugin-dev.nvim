@@ -42,6 +42,59 @@ M.canonical = manifest.canonical
 M.detect = manifest.detect
 M.validate_root = manifest.validate_root
 
+local function file_path(bufnr_or_path)
+  if type(bufnr_or_path) == "string" then
+    return M.canonical(bufnr_or_path)
+  end
+  local bufnr = bufnr_or_path or 0
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+  local path = vim.api.nvim_buf_get_name(bufnr)
+  return path ~= "" and M.canonical(path) or nil
+end
+
+function M.includes(bufnr_or_path, info)
+  local path = file_path(bufnr_or_path)
+  if not path then
+    return false
+  end
+  info = info or M.detect(bufnr_or_path)
+  if not info then
+    return false
+  end
+
+  local filter = require("omarchy_plugin_dev.config").get().qml_file_filter
+  if not filter then
+    return true
+  end
+  local relative_path = vim.fs.relpath(info.root, path)
+  if not relative_path then
+    return false
+  end
+  local included = filter({
+    manifest = vim.deepcopy(info.manifest),
+    path = path,
+    relative_path = relative_path,
+    root = info.root,
+  })
+  if type(included) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: qml_file_filter must return a boolean")
+  end
+  return included
+end
+
+function M.detect_file(bufnr_or_path)
+  local info, detection_error = M.detect(bufnr_or_path)
+  if not info then
+    return nil, detection_error
+  end
+  if not M.includes(bufnr_or_path, info) then
+    return nil, "QML file is not owned by this Omarchy plugin project"
+  end
+  return info
+end
+
 function M.tasks_path(root)
   return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
 end

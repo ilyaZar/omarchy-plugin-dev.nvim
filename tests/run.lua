@@ -84,6 +84,8 @@ local nested = vim.fs.joinpath(root, "nested")
 vim.fn.mkdir(nested, "p")
 local qml_path = vim.fs.joinpath(nested, "View.qml")
 write(qml_path, { "import QtQuick", "Item {}" })
+local excluded_qml_path = vim.fs.joinpath(root, "optional target", "View.qml")
+write(excluded_qml_path, { "import QtQuick", "Item {}" })
 local qml_js_path = vim.fs.joinpath(nested, "PanelModel.js")
 write(qml_js_path, { ".pragma library", "function value() { return 1 }" })
 local regular_js_path = vim.fs.joinpath(nested, "browser.js")
@@ -107,6 +109,28 @@ vim.api.nvim_buf_delete(qml_js_buf, { force = true })
 local detected = assert(project.detect(qml_path))
 assert(detected.root == project.canonical(root), "project root detection used the wrong root")
 assert(detected.manifest.id == "dev.example", "detected manifest changed")
+assert(project.detect_file(excluded_qml_path), "default ownership rejected a project QML file")
+
+local filter_context
+config.setup({
+  qml_file_filter = function(context)
+    filter_context = context
+    return context.path ~= project.canonical(excluded_qml_path)
+  end,
+})
+assert(project.detect_file(qml_path), "ownership filter rejected an included QML file")
+assert(project.detect_file(excluded_qml_path) == nil, "ownership filter accepted excluded QML")
+assert(filter_context.root == project.canonical(root), "ownership filter received the wrong root")
+assert(filter_context.manifest.id == "dev.example", "ownership filter lost the manifest")
+assert(
+  filter_context.relative_path == "optional target/View.qml",
+  "ownership filter received the wrong relative path"
+)
+assert(
+  filter_context.path == project.canonical(excluded_qml_path),
+  "ownership path is not canonical"
+)
+config.setup()
 
 local unrelated = vim.fs.joinpath(temp_root, "unrelated")
 write(vim.fs.joinpath(unrelated, "View.qml"), { "Item {}" })
@@ -229,6 +253,23 @@ assert(
   tostring(format_option_error):find("format_on_save must be a boolean", 1, true),
   "invalid format_on_save configuration produced an unclear error"
 )
+local valid_filter_option, filter_option_error = pcall(config.setup, { qml_file_filter = true })
+assert(not valid_filter_option, "invalid qml_file_filter configuration was accepted")
+assert(
+  tostring(filter_option_error):find("qml_file_filter must be a function", 1, true),
+  "invalid qml_file_filter configuration produced an unclear error"
+)
+config.setup({
+  qml_file_filter = function()
+    return "yes"
+  end,
+})
+local valid_filter_result, filter_result_error = pcall(project.detect_file, qml_path)
+assert(not valid_filter_result, "non-boolean qml_file_filter result was accepted")
+assert(
+  tostring(filter_result_error):find("qml_file_filter must return a boolean", 1, true),
+  "invalid qml_file_filter result produced an unclear error"
+)
 config.setup()
 
 local fake_shell_root = vim.fs.joinpath(temp_root, "fake shell")
@@ -325,7 +366,11 @@ assert(
   "Qt's QML import path was not discovered"
 )
 vim.env.FAKE_QT_QML = nil
-config.setup()
+config.setup({
+  qml_file_filter = function(context)
+    return context.path ~= project.canonical(excluded_qml_path)
+  end,
+})
 
 local check_spec = assert(task_specs.check(project.canonical(root)))
 assert(check_spec.cwd == project.canonical(root), "check task cwd is wrong")
@@ -345,6 +390,10 @@ assert(lint_info.major >= 6, "automatic qmllint resolution selected a pre-Qt-6 e
 assert(lint_step.cmd[1] == lint_info.path, "lint task does not use the resolved Qt 6 qmllint")
 assert(lint_step.cmd[2] == "-I", "lint task lost the import flag")
 assert(vim.tbl_contains(lint_step.cmd, qml_js_path), "lint task omitted QML JavaScript")
+assert(
+  not vim.tbl_contains(lint_step.cmd, excluded_qml_path),
+  "lint task included QML rejected by the ownership filter"
+)
 assert(
   not vim.tbl_contains(lint_step.cmd, regular_js_path),
   "lint task included ordinary JavaScript"
@@ -371,6 +420,7 @@ assert(
   "lint task still duplicates language-server diagnostics"
 )
 assert(lint_step.cwd == project.canonical(root), "lint task cwd is wrong")
+config.setup()
 
 local test_spec = assert(task_specs.test(project.canonical(root)))
 assert(
@@ -575,6 +625,8 @@ local original_get_clients = vim.lsp.get_clients
 local original_detach_client = vim.lsp.buf_detach_client
 local original_diagnostic_reset = vim.diagnostic.reset
 local original_get_namespace = vim.lsp.diagnostic.get_namespace
+local original_defer_fn = vim.defer_fn
+local deferred_cleanups = {}
 local detached_clients = {}
 local reset_namespaces = {}
 local stopped_clients = {}
@@ -589,13 +641,23 @@ local function fake_client(id, name, attached_buffers)
     end,
   }
 end
+local generic_qml_client = fake_client(17, "qmlls", {
+  [project_buf] = true,
+  [998] = true,
+})
+local project_qml_client = fake_client(18, "omarchy_plugin_dev", { [project_buf] = true })
+local javascript_client = fake_client(19, "vtsls", { [project_buf] = true, [999] = true })
 vim.lsp.get_clients = function(opts)
-  assert(opts.bufnr == project_buf, "LSP ownership queried the wrong buffer")
-  return {
-    fake_client(17, "qmlls", { [project_buf] = true }),
-    fake_client(18, "omarchy_plugin_dev", { [project_buf] = true }),
-    fake_client(19, "vtsls", { [project_buf] = true, [999] = true }),
-  }
+  if not opts or opts.bufnr ~= project_buf then
+    return original_get_clients(opts)
+  end
+  local clients = { generic_qml_client, project_qml_client, javascript_client }
+  if opts.name then
+    clients = vim.tbl_filter(function(client)
+      return client.name == opts.name
+    end, clients)
+  end
+  return clients
 end
 vim.lsp.buf_detach_client = function(bufnr, client_id)
   assert(bufnr == project_buf, "generic QML server was detached from the wrong buffer")
@@ -608,10 +670,42 @@ vim.diagnostic.reset = function(namespace, bufnr)
   assert(bufnr == project_buf, "generic diagnostics were reset for the wrong buffer")
   reset_namespaces[#reset_namespaces + 1] = namespace
 end
+vim.defer_fn = function(callback, delay)
+  assert(delay == 100, "competing-client cleanup used an unexpected delay")
+  deferred_cleanups[#deferred_cleanups + 1] = callback
+end
+config.setup({
+  qml_file_filter = function(context)
+    return context.path ~= project.canonical(qml_js_path)
+  end,
+})
+assert(not lsp.claim(project_buf), "excluded QML buffer claimed language-server ownership")
+assert(#detached_clients == 0, "excluded QML buffer detached a language client")
+config.setup()
 assert(lsp.claim(project_buf), "detected project buffer did not claim QML server ownership")
 assert(vim.deep_equal(detached_clients, { 17, 19 }), "project detached the wrong language clients")
 assert(vim.deep_equal(reset_namespaces, { 71, 73 }), "competing diagnostics were not cleared")
-assert(vim.deep_equal(stopped_clients, { 17 }), "unused language clients were not stopped")
+assert(#deferred_cleanups == 2, "competing clients were not checked after attachment settled")
+generic_qml_client.attached_buffers[998] = nil
+for _, cleanup in ipairs(deferred_cleanups) do
+  cleanup()
+end
+assert(
+  vim.deep_equal(stopped_clients, { 17 }),
+  "unused language client was not stopped after deferred attachment cleanup"
+)
+detached_clients = {}
+reset_namespaces = {}
+deferred_cleanups = {}
+assert(lsp.release(project_buf), "excluded buffer did not release the project-aware client")
+assert(vim.deep_equal(detached_clients, { 18 }), "release detached the wrong language client")
+assert(vim.deep_equal(reset_namespaces, { 72 }), "release left project diagnostics behind")
+assert(#deferred_cleanups == 1, "released project client was not checked after detachment")
+deferred_cleanups[1]()
+assert(
+  vim.deep_equal(stopped_clients, { 17, 18 }),
+  "released project client remained running without another buffer"
+)
 config.setup({
   executables = { qml_language_server = "definitely-missing-qml-language-server" },
 })
@@ -623,6 +717,7 @@ vim.lsp.get_clients = original_get_clients
 vim.lsp.buf_detach_client = original_detach_client
 vim.lsp.diagnostic.get_namespace = original_get_namespace
 vim.diagnostic.reset = original_diagnostic_reset
+vim.defer_fn = original_defer_fn
 
 local format_buf = vim.fn.bufadd(qml_path)
 vim.fn.bufload(format_buf)
@@ -696,6 +791,34 @@ require("omarchy_plugin_dev.lsp").root_dir(unrelated_buf, function(root_dir)
   unrelated_lsp_root = root_dir
 end)
 assert(unrelated_lsp_root == nil, "LSP root callback claimed an unrelated QML project")
+
+config.setup({
+  qml_file_filter = function(context)
+    return context.path ~= project.canonical(excluded_qml_path)
+  end,
+})
+local excluded_buf = vim.fn.bufadd(excluded_qml_path)
+vim.fn.bufload(excluded_buf)
+vim.bo[excluded_buf].shiftwidth = 2
+vim.b[excluded_buf].autoformat = true
+vim.bo[excluded_buf].filetype = "qml"
+assert(
+  not require("omarchy_plugin_dev").attach(excluded_buf),
+  "ownership filter did not reject the QML buffer"
+)
+assert(vim.bo[excluded_buf].shiftwidth == 2, "excluded QML indentation was changed")
+assert(vim.b[excluded_buf].autoformat == true, "excluded QML formatting was changed")
+assert(
+  not mapping_by_desc(excluded_buf, "Omarchy Plugin: test"),
+  "excluded QML buffer received project mappings"
+)
+local excluded_lsp_root
+require("omarchy_plugin_dev.lsp").root_dir(excluded_buf, function(root_dir)
+  excluded_lsp_root = root_dir
+end)
+assert(excluded_lsp_root == nil, "LSP root callback claimed excluded QML")
+vim.api.nvim_buf_delete(excluded_buf, { force = true })
+config.setup()
 
 local created_tasks = {}
 local opened = {}

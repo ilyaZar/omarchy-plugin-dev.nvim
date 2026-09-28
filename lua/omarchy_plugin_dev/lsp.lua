@@ -11,12 +11,24 @@ local javascript_clients = {
 }
 
 local function stop_if_unused(client, detached_bufnr)
-  for bufnr in pairs(client.attached_buffers) do
-    if bufnr ~= detached_bufnr then
+  vim.defer_fn(function()
+    if type(client.is_stopped) == "function" and client:is_stopped() then
       return
     end
-  end
-  client:stop()
+    for bufnr in pairs(client.attached_buffers) do
+      if bufnr ~= detached_bufnr then
+        return
+      end
+    end
+    client:stop()
+  end, 100)
+end
+
+local function detach(client, bufnr)
+  vim.lsp.buf_detach_client(bufnr, client.id)
+  local namespace = vim.lsp.diagnostic.get_namespace(client.id)
+  vim.diagnostic.reset(namespace, bufnr)
+  stop_if_unused(client, bufnr)
 end
 
 local function candidates()
@@ -49,7 +61,7 @@ function M.installation_message()
 end
 
 function M.root_dir(bufnr, on_dir)
-  local info = require("omarchy_plugin_dev.project").detect(bufnr)
+  local info = require("omarchy_plugin_dev.project").detect_file(bufnr)
   if info then
     on_dir(info.root)
   end
@@ -59,7 +71,7 @@ function M.claim(bufnr)
   if not M.available() then
     return false
   end
-  local info = require("omarchy_plugin_dev.project").detect(bufnr)
+  local info = require("omarchy_plugin_dev.project").detect_file(bufnr)
   if not info then
     return false
   end
@@ -68,12 +80,18 @@ function M.claim(bufnr)
   for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
     local generic_javascript = vim.bo[bufnr].filetype == "qmljs" and javascript_clients[client.name]
     if client.name == "qmlls" or generic_javascript then
-      vim.lsp.buf_detach_client(bufnr, client.id)
-      local namespace = vim.lsp.diagnostic.get_namespace(client.id)
-      vim.diagnostic.reset(namespace, bufnr)
-      stop_if_unused(client, bufnr)
+      detach(client, bufnr)
       detached = true
     end
+  end
+  return detached
+end
+
+function M.release(bufnr)
+  local detached = false
+  for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr, name = M.name })) do
+    detach(client, bufnr)
+    detached = true
   end
   return detached
 end
