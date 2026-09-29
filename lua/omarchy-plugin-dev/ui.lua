@@ -120,7 +120,18 @@ local function dashboard_rows(info, bufnr, width)
 
   section("Project")
   add(field("root", info.root))
-  add(field("manifest", "recognized schema v1 (" .. info.manifest.id .. ")", "DiagnosticInfo"))
+  local schema = info.manifest.schemaVersion
+  local recognized = schema == 1
+  local schema_label = type(schema) == "number" and "v" .. tostring(schema) or vim.inspect(schema)
+  local id = type(info.manifest.id) == "string" and info.manifest.id or "missing id"
+  local manifest_row = field(
+    "manifest",
+    recognized and "recognized" or "unsupported",
+    recognized and "DiagnosticOk" or "DiagnosticError",
+    "schema " .. schema_label .. " (" .. id .. ")"
+  )
+  manifest_row[3][2] = recognized and "Comment" or "Normal"
+  add(manifest_row)
   add(field("official validation", "checking", "DiagnosticWarn"))
   local validation_line = #rows
 

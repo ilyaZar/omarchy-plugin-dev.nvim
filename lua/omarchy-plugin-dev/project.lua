@@ -40,6 +40,7 @@ end
 
 M.canonical = manifest.canonical
 M.detect = manifest.detect
+M.inspect = manifest.inspect
 M.validate_root = manifest.validate_root
 
 local function file_path(bufnr_or_path)

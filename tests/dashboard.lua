@@ -11,7 +11,8 @@ local columns, lines = vim.o.columns, vim.o.lines
 local pending = {}
 local calls = {}
 local source_buf = vim.api.nvim_get_current_buf()
-local info = { root = "/tmp/dashboard fixture", manifest = { id = "dev.dashboard" } }
+local info =
+  { root = "/tmp/dashboard fixture", manifest = { id = "dev.dashboard", schemaVersion = 1 } }
 local expected = {
   h = "hot_reload",
   b = "build",
@@ -89,8 +90,25 @@ local function check_layout(bufnr)
     end
   end
 end
+local function check_manifest_style(bufnr, state, status_group, detail_group)
+  local ns = vim.api.nvim_get_namespaces()["omarchy-plugin-dev.dashboard"]
+  for index, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    if line:match("^  manifest:") then
+      assert(line:find(state, 1, true), "wrong manifest status")
+      local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, { index - 1, 0 }, { index - 1, -1 }, {
+        details = true,
+      })
+      assert(marks[2][4].hl_group == status_group, "wrong manifest status color")
+      assert(marks[3][4].hl_group == detail_group, "wrong manifest detail color")
+      return
+    end
+  end
+  error("manifest row is missing")
+end
 local contents = text(buf)
 check_layout(buf)
+check_manifest_style(buf, "recognized", "DiagnosticOk", "Comment")
+assert(contents:find("schema v1 (dev.dashboard)", 1, true), "schema detail was lost")
 assert(contents:find("running as client 2", 1, true), "LSP detail was lost")
 assert(contents:match("configured%s+true"), "test command detail was lost")
 assert(selected_text(buf, win):find("root:", 1, true), "overview did not select its first row")
@@ -250,6 +268,15 @@ contents = table.concat(vim.api.nvim_buf_get_lines(new_buf, 0, -1, false), "\n")
 assert(not contents:find("stale result", 1, true), "late validation changed new dashboard")
 key(new_buf, "<Esc>")()
 assert(not vim.api.nvim_win_is_valid(new_win), "escape did not close dashboard")
+
+for _, schema in ipairs({ 2, 42, "1", false }) do
+  info.manifest.schemaVersion = schema
+  local unsupported_buf, unsupported_win = ui.dashboard(info, source_buf)
+  check_manifest_style(unsupported_buf, "unsupported", "DiagnosticError", "Normal")
+  pending[#pending](false, "unsupported schema")
+  check_manifest_style(unsupported_buf, "unsupported", "DiagnosticError", "Normal")
+  vim.api.nvim_win_close(unsupported_win, true)
+end
 
 vim.o.columns, vim.o.lines = columns, lines
 project.external_validate_async = saved_validate

@@ -126,7 +126,7 @@ function M.validate(manifest, root)
   return true
 end
 
-function M.validate_root(root)
+local function read_root(root)
   root = M.canonical(root)
   local path = vim.fs.joinpath(root, "manifest.json")
   local text, read_error = read_file(path)
@@ -137,10 +137,6 @@ function M.validate_root(root)
   if not manifest then
     return nil, decode_error
   end
-  local valid, validation_error = M.validate(manifest, root)
-  if not valid then
-    return nil, string.format("invalid Omarchy plugin manifest at %s: %s", path, validation_error)
-  end
   return {
     root = root,
     manifest_path = path,
@@ -148,7 +144,24 @@ function M.validate_root(root)
   }
 end
 
-function M.detect(bufnr_or_path)
+function M.validate_root(root)
+  local info, read_error = read_root(root)
+  if not info then
+    return nil, read_error
+  end
+  local valid, validation_error = M.validate(info.manifest, info.root)
+  if not valid then
+    return nil,
+      string.format(
+        "invalid Omarchy plugin manifest at %s: %s",
+        info.manifest_path,
+        validation_error
+      )
+  end
+  return info
+end
+
+local function detect(bufnr_or_path, load_root)
   local start
   if type(bufnr_or_path) == "string" then
     local path = M.canonical(bufnr_or_path)
@@ -169,7 +182,16 @@ function M.detect(bufnr_or_path)
   if not manifest_path then
     return nil, "no manifest.json found in this directory or its parents"
   end
-  return M.validate_root(vim.fs.dirname(manifest_path))
+  return load_root(vim.fs.dirname(manifest_path))
+end
+
+function M.detect(bufnr_or_path)
+  return detect(bufnr_or_path, M.validate_root)
+end
+
+-- Inspection must remain available when a manifest cannot be used for builds.
+function M.inspect(bufnr_or_path)
+  return detect(bufnr_or_path, read_root)
 end
 
 return M

@@ -1115,6 +1115,7 @@ vim.cmd.close()
 
 package.loaded.overseer = original_overseer
 dofile("tests/dashboard.lua")
+dofile("tests/manifest_inspection.lua")
 dofile("tests/configuration.lua")
 assert(vim.fn.delete(temp_root, "rf") == 0, "temporary test tree was not removed")
 
