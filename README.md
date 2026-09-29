@@ -162,7 +162,7 @@ See [contributor notes](CONTRIBUTING.md) for smoke-test setup.
 
 [coverage]: https://app.codecov.io/gh/ilyaZar/omarchy-plugin-dev.nvim
 [coverage-badge]:
-  https://img.shields.io/codecov/c/github/ilyaZar/omarchy-plugin-dev.nvim/main?flag=lua&style=flat-square&logo=codecov&logoColor=white&label=lua%20coverage&labelColor=2e3440&color=88c0d0
+  https://img.shields.io/codecov/c/github/ilyaZar/omarchy-plugin-dev.nvim/main?flag=lua&style=flat-square&logo=codecov&logoColor=white&label=lua%20coverage&labelColor=2e3440&color=F01F7A
 [ci]:
   https://github.com/ilyaZar/omarchy-plugin-dev.nvim/actions/workflows/check.yml
 [ci-badge]:
