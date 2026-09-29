@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local plugin_root = assert(vim.env.OMARCHY_PLUGIN_DEV_SMOKE_ROOT)
 local entry_points = vim.json.decode(assert(vim.env.OMARCHY_PLUGIN_DEV_ENTRY_POINTS))
 local unrelated_qml = assert(vim.env.OMARCHY_PLUGIN_DEV_UNRELATED_QML)
@@ -65,15 +66,16 @@ vim.cmd.buffer(project_buf)
 vim.cmd.OmaDev()
 assert(vim.bo.filetype == "omarchy-plugin-dev", "dashboard command did not open")
 local dashboard_buf = vim.api.nvim_get_current_buf()
-local dashboard_lines = vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false)
+local function dashboard_text()
+  return table.concat(vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false), "\n"):gsub(" +", " ")
+end
 assert(
-  dashboard_lines[3]:find("manifest: recognized", 1, true),
+  dashboard_text():find("manifest: recognized", 1, true),
   "dashboard did not distinguish manifest recognition from official validation"
 )
 assert(
   vim.wait(5000, function()
-    local line = vim.api.nvim_buf_get_lines(dashboard_buf, 3, 4, false)[1] or ""
-    return line:find("official validation: passed", 1, true) ~= nil
+    return dashboard_text():find("official validation: passed", 1, true) ~= nil
   end),
   "dashboard did not report successful official validation"
 )
@@ -149,7 +151,12 @@ end
 vim.cmd.OmaDevInit()
 vim.ui.select = original_select
 local tasks_path = vim.fs.joinpath(init_root, ".omarchy-plugin-dev", "task-config.json")
-assert(vim.fn.filereadable(tasks_path) == 1, "initialization did not create task-config.json")
+assert(
+  vim.wait(12000, function()
+    return vim.fn.filereadable(tasks_path) == 1
+  end),
+  "initialization did not create task-config.json"
+)
 assert(
   vim.tbl_contains(
     vim.fn.readfile(vim.fs.joinpath(init_root, ".gitignore")),

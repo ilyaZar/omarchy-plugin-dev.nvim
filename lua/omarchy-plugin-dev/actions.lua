@@ -1,4 +1,5 @@
 local M = {}
+local init_requests = {}
 
 local function current(bufnr)
   local info, detection_error = require("omarchy-plugin-dev.project").detect(bufnr or 0)
@@ -85,6 +86,9 @@ end
 
 function M.init_project(bufnr, opts)
   bufnr = bufnr or 0
+  if bufnr == 0 then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
   opts = opts or {}
   local info = current(bufnr)
   if not info then
@@ -92,30 +96,57 @@ function M.init_project(bufnr, opts)
   end
   local project = require("omarchy-plugin-dev.project")
   local path = project.existing_tasks_path(info.root)
+  local source_win = vim.api.nvim_get_current_win()
+  local request = {}
+  init_requests[info.root] = request
+  local function active()
+    return init_requests[info.root] == request
+  end
+  local function cancel()
+    if active() then
+      init_requests[info.root] = nil
+    end
+  end
 
   local function initialize(force, test_command)
-    local created, init_error = project.initialize(info.root, {
+    if not active() then
+      return
+    end
+    project.initialize_async(info.root, {
       force = force,
       test_command = test_command,
-    })
-    if created then
-      local message = "Created " .. created
-      if test_command then
-        message = message .. " with test runner " .. test_command[1]
+      active = active,
+    }, function(created, init_error)
+      if not active() then
+        return
+      end
+      cancel()
+      if created then
+        local message = "Created " .. created
+        if test_command then
+          message = message .. " with test runner " .. test_command[1]
+        else
+          message = message .. " without a test command"
+        end
+        require("omarchy-plugin-dev.messages").show(message)
+        if
+          not test_command
+          and vim.api.nvim_win_is_valid(source_win)
+          and vim.api.nvim_get_current_win() == source_win
+          and vim.api.nvim_win_get_buf(source_win) == bufnr
+        then
+          vim.cmd.edit(vim.fn.fnameescape(created))
+        end
       else
-        message = message .. " without a test command"
+        require("omarchy-plugin-dev.messages").show(init_error, vim.log.levels.ERROR)
       end
-      require("omarchy-plugin-dev.messages").show(message)
-      if not test_command then
-        vim.cmd.edit(vim.fn.fnameescape(created))
-      end
-    else
-      require("omarchy-plugin-dev.messages").show(init_error, vim.log.levels.ERROR)
-    end
-    return created
+    end)
   end
 
   local function choose_test_command(force)
+    if not active() then
+      return
+    end
     local candidates = project.test_candidates(info.root)
     if #candidates == 0 then
       return initialize(force)
@@ -133,6 +164,8 @@ function M.init_project(bufnr, opts)
     }, function(choice)
       if choice then
         initialize(force, choice.command)
+      else
+        cancel()
       end
     end)
   end
@@ -146,6 +179,8 @@ function M.init_project(bufnr, opts)
   }, function(choice)
     if choice == "Overwrite task configuration" then
       choose_test_command(true)
+    else
+      cancel()
     end
   end)
 end

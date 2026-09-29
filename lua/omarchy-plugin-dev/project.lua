@@ -339,7 +339,9 @@ function M.external_validate_async(root, callback)
   vim.system(command, { text = true, timeout = 10000 }, function(result)
     local valid = result.code == 0
     local detail = validation_output(result)
-    if not valid and detail == "" then
+    if result.code == 124 then
+      detail = "validation timed out after 10 seconds"
+    elseif not valid and detail == "" then
       detail = "validation failed"
     end
     vim.schedule(function()
@@ -363,23 +365,9 @@ local function valid_test_command(command)
   return true
 end
 
-function M.initialize(root, opts)
-  opts = opts or {}
-  if not valid_test_command(opts.test_command) then
-    return nil, "test command must be a non-empty argument array"
-  end
-  local info, validation_error = M.validate_root(root)
-  if not info then
-    return nil, validation_error
-  end
-  local validator = opts.validator or external_validate
-  local valid, external_error = validator(info.root)
-  if not valid then
-    return nil, external_error
-  end
-
-  local path = M.tasks_path(info.root)
-  local existing_path = M.existing_tasks_path(info.root)
+local function write_tasks(root, opts)
+  local path = M.tasks_path(root)
+  local existing_path = M.existing_tasks_path(root)
   if vim.fn.filereadable(existing_path) == 1 and not opts.force then
     return nil, string.format("configuration already exists: %s", existing_path), "exists"
   end
@@ -412,15 +400,85 @@ function M.initialize(root, opts)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
   end
-  local legacy_path = legacy_tasks_path(info.root)
+  local legacy_path = legacy_tasks_path(root)
   if legacy_path ~= path and vim.fn.filereadable(legacy_path) == 1 then
     vim.fn.delete(legacy_path)
   end
-  local _, _, ignore_error = ensure_gitignore(info.root)
+  local _, _, ignore_error = ensure_gitignore(root)
   if ignore_error then
     return nil, ignore_error
   end
   return path
+end
+
+function M.initialize(root, opts)
+  opts = opts or {}
+  if not valid_test_command(opts.test_command) then
+    return nil, "test command must be a non-empty argument array"
+  end
+  local info, validation_error = M.validate_root(root)
+  if not info then
+    return nil, validation_error
+  end
+  local validator = opts.validator or external_validate
+  local valid, external_error = validator(info.root)
+  if not valid then
+    return nil, external_error
+  end
+
+  return write_tasks(info.root, opts)
+end
+
+function M.initialize_async(root, opts, callback)
+  opts = opts or {}
+  if not valid_test_command(opts.test_command) then
+    return vim.schedule(function()
+      callback(nil, "test command must be a non-empty argument array")
+    end)
+  end
+  local info, validation_error = M.validate_root(root)
+  if not info then
+    return vim.schedule(function()
+      callback(nil, validation_error)
+    end)
+  end
+
+  local approved_path = M.existing_tasks_path(info.root)
+  local approved_content
+  if opts.force and vim.fn.filereadable(approved_path) == 1 then
+    approved_content, validation_error = read_file(approved_path)
+    if not approved_content then
+      return vim.schedule(function()
+        callback(nil, validation_error)
+      end)
+    end
+  end
+
+  M.external_validate_async(info.root, function(valid, detail)
+    if opts.active and not opts.active() then
+      return
+    end
+    if not valid then
+      local message = detail or "validation failed"
+      callback(nil, valid == nil and message or "Omarchy validation failed: " .. message)
+      return
+    end
+    local current_info, current_error = M.validate_root(info.root)
+    if not current_info then
+      callback(nil, current_error)
+      return
+    end
+    if opts.force then
+      local current_path = M.existing_tasks_path(info.root)
+      local current_content = vim.fn.filereadable(current_path) == 1 and read_file(current_path)
+        or nil
+      if current_path ~= approved_path or current_content ~= approved_content then
+        callback(nil, "task configuration changed during validation; run initialization again")
+        return
+      end
+    end
+    callback(write_tasks(info.root, opts))
+  end)
 end
 
 return M
