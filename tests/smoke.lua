@@ -148,8 +148,8 @@ vim.ui.select = function(items, _, on_choice)
 end
 vim.cmd.OmaDevInit()
 vim.ui.select = original_select
-local tasks_path = vim.fs.joinpath(init_root, ".omarchy-plugin-dev", "tasks.json")
-assert(vim.fn.filereadable(tasks_path) == 1, "initialization did not create tasks.json")
+local tasks_path = vim.fs.joinpath(init_root, ".omarchy-plugin-dev", "task-config.json")
+assert(vim.fn.filereadable(tasks_path) == 1, "initialization did not create task-config.json")
 assert(
   vim.tbl_contains(
     vim.fn.readfile(vim.fs.joinpath(init_root, ".gitignore")),
@@ -158,7 +158,8 @@ assert(
   "initialization did not add the task directory to .gitignore"
 )
 local project = require("omarchy-plugin-dev.project")
-local initialized_tasks = assert(project.load_tasks(init_root), "initialized tasks.json is invalid")
+local initialized_tasks =
+  assert(project.load_tasks(init_root), "initialized task-config.json is invalid")
 local candidates = project.test_candidates(init_root)
 if #candidates > 0 then
   assert(initialized_tasks.tasks.test, "detected test runner was not configured")

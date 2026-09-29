@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
+
+OMARCHY=${OMARCHY_PLUGIN_DEV_OMARCHY:-omarchy}
+command -v "$OMARCHY" >/dev/null 2>&1 || {
+  task_log_error "$OMARCHY is not executable"
+  exit 1
+}
+
+task_log_info "Restarting Omarchy shell"
+task_log_command "omarchy restart shell"
+if "$OMARCHY" restart shell; then
+  task_log_ok "Omarchy shell restarted and ready"
+else
+  status=$?
+  task_log_error "Omarchy shell restart failed"
+  exit "$status"
+fi

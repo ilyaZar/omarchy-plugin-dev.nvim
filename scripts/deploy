@@ -1,28 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-RED=$'\033[0;31m'
-GREEN=$'\033[0;32m'
-BLUE=$'\033[1;34m'
-NC=$'\033[0m'
-TERMINAL_WIDTH=120
-
-log_ok() {
-  echo -e "${GREEN}[OK] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
-}
-
-log_info() {
-  echo -e "${BLUE}[INFO] $*${NC}" | fold -s -w "$TERMINAL_WIDTH"
-}
-
-log_error() {
-  echo -e "${RED}[ERROR] $*${NC}" | fold -s -w "$TERMINAL_WIDTH" >&2
-}
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
 
 fail() {
-  log_error "$*"
+  task_log_error "$*"
   exit 1
 }
+
+report_failure() {
+  local status=$?
+  task_log_error "Plugin deployment failed"
+  exit "$status"
+}
+trap report_failure ERR
 
 usage() {
   printf 'Usage: %s [--apply|--dry-run] [--enable-auto] [--enable-first-install] <plugin-root>\n' "$0"
@@ -83,7 +75,6 @@ root=$(realpath -- "$root")
 [[ -d $root ]] || fail "plugin root does not exist: $root"
 [[ -f $root/manifest.json ]] || fail "manifest.json is missing from $root"
 
-"$OMARCHY" plugin validate "$root"
 plugin_id=$("$JQ" -er '.id' "$root/manifest.json") || fail "manifest id is invalid"
 [[ $plugin_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $plugin_id != *..* ]] \
   || fail "unsafe plugin id: $plugin_id"
@@ -101,6 +92,7 @@ enable_if_requested() {
   local discovered=false
   local enabled=false
   local enable_output=""
+  local plugin_list_filter="any(.[]; .id == \$id)"
   local rescanned=false
   local responsive=false
 
@@ -109,6 +101,9 @@ enable_if_requested() {
   fi
   [[ $apply == true && $should_enable == true ]] || return 0
 
+  task_log_info "Enabling plugin"
+  task_log_context "Plugin: $plugin_id"
+  task_log_command "omarchy-shell shell ping"
   for (( attempt = 0; attempt < 100; attempt++ )); do
     if "$OMARCHY_SHELL" shell ping >/dev/null 2>&1; then
       responsive=true
@@ -118,6 +113,7 @@ enable_if_requested() {
   done
   [[ $responsive == true ]] || fail "omarchy-shell did not become ready"
 
+  task_log_command "omarchy-shell shell rescanPlugins"
   for (( attempt = 0; attempt < 100; attempt++ )); do
     if "$OMARCHY_SHELL" shell rescanPlugins >/dev/null 2>&1; then
       rescanned=true
@@ -127,15 +123,18 @@ enable_if_requested() {
   done
   [[ $rescanned == true ]] || fail "omarchy-shell did not rescan plugins"
 
+  task_log_command "omarchy plugin list --json"
   for (( attempt = 0; attempt < 40; attempt++ )); do
-    if "$OMARCHY" plugin list --json 2>/dev/null | "$JQ" -e --arg id "$plugin_id" \
-      'any(.[]; .id == $id)' >/dev/null; then
+    if "$OMARCHY" plugin list --json 2>/dev/null \
+      | "$JQ" -e --arg id "$plugin_id" "$plugin_list_filter" >/dev/null; then
       discovered=true
       break
     fi
     sleep 0.05
   done
   [[ $discovered == true ]] || fail "plugin '$plugin_id' is not known after rescan"
+
+  task_log_command "omarchy plugin enable $plugin_id"
   for (( attempt = 0; attempt < 100; attempt++ )); do
     if enable_output=$("$OMARCHY" plugin enable "$plugin_id" 2>&1); then
       enabled=true
@@ -143,18 +142,26 @@ enable_if_requested() {
     fi
     sleep 0.1
   done
-  [[ $enabled == true ]] || fail "${enable_output:-could not enable plugin '$plugin_id'}"
-  printf '%s\n' "$enable_output"
+  if [[ $enabled != true ]]; then
+    enable_output=${enable_output:-"could not enable plugin '$plugin_id'"}
+    fail "$enable_output"
+  fi
+  task_log_ok "Enabled plugin: $plugin_id"
 }
 
 if [[ -e $target || -L $target ]]; then
   target_source=$(realpath -- "$target") \
     || fail "installed plugin is a dangling symlink: $target"
   if [[ $target_source == "$root" ]]; then
+    task_log_info "Preparing validated deployment"
+    task_log_context "Project directory: $root"
+    task_log_context "Installation directory: $target"
+    task_log_command "omarchy plugin validate <project>"
+    "$OMARCHY" plugin validate "$root"
     if [[ -L $target ]]; then
-      log_ok "Installed plugin is linked to the project source"
+      task_log_ok "Project source is linked as the installed plugin; no files copied"
     else
-      log_ok "The project source is the installed plugin"
+      task_log_ok "Project source is already the installed plugin; no files copied"
     fi
     enable_if_requested
     exit 0
@@ -186,24 +193,37 @@ excludes=(
   --exclude=coverage/
 )
 
+task_log_info "Preparing validated deployment"
+task_log_context "Project directory: $root"
+task_log_context "Staging directory: $stage"
+task_log_command "omarchy plugin validate <project>"
+"$OMARCHY" plugin validate "$root"
+task_log_command "rsync -a <project>/ <staging>/"
 "$RSYNC" -a "${excludes[@]}" -- "$root/" "$stage/"
+task_log_command "omarchy plugin validate <staging>"
 "$OMARCHY" plugin validate "$stage"
+task_log_ok "Prepared validated plugin copy"
 
-log_info "Source: $root"
-log_info "Target: $target"
 if [[ $apply != true ]]; then
+  task_log_info "Previewing plugin file installation"
+  task_log_context "Installation directory: $target"
   if [[ -d $target ]]; then
+    task_log_command "rsync -ani --delete <staging>/ <installation>/"
     "$RSYNC" -ani --delete "${excludes[@]}" -- "$stage/" "$target/"
   else
+    task_log_context "Installation state: target absent; all staged files would be created"
     find "$stage" -mindepth 1 -printf 'create %P\n' | sort
   fi
-  log_info "Dry run only; pass --apply to synchronize"
+  task_log_ok "Dry run complete; no files installed"
   exit 0
 fi
 
+task_log_info "Installing plugin files"
+task_log_context "Installation directory: $target"
 mkdir -p -- "$plugins_dir" "$target"
+task_log_command "rsync -a --delete <staging>/ <installation>/"
 "$RSYNC" -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
+task_log_command "omarchy plugin validate <installation>"
 "$OMARCHY" plugin validate "$target"
-log_ok "Deployed $plugin_id"
+task_log_ok "Installed plugin files: $plugin_id"
 enable_if_requested
-log_info "The build task will restart the Omarchy shell"

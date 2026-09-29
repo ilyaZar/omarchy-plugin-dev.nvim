@@ -42,15 +42,17 @@ INITIALIZATION                                *omarchy-plugin-dev-initialization
 :OmaDevInit
     Validate the detected project with the installed Omarchy validator and
     add the hidden task directory to .gitignore before creating:
-        .omarchy-plugin-dev/tasks.json
+        .omarchy-plugin-dev/task-config.json
 
     If an executable ./scripts/test or ./tests/all.sh exists, choose whether
     to configure it. Otherwise an empty tasks object is created and opened
     for editing. Initialization never invents a missing test command.
 
 :OmaDevInit!
-    Explicitly approve replacing an existing tasks.json. Without !, an
-    existing file is preserved and an overwrite choice is shown.
+    Explicitly approve replacing an existing task configuration. Without !, an
+    existing file is preserved and an overwrite choice is shown. Legacy
+    .omarchy-plugin-dev/tasks.json files remain readable and are replaced with
+    task-config.json only after explicit overwrite approval.
 
 Schema version 1 contains a "tasks" object. Each task contains a non-empty
 "command" argument array and may contain a string "description". Commands

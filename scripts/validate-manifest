@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
+
+OMARCHY=${OMARCHY_PLUGIN_DEV_OMARCHY:-omarchy}
+command -v "$OMARCHY" >/dev/null 2>&1 || {
+  task_log_error "$OMARCHY is not executable"
+  exit 1
+}
+
+root=$(pwd -P)
+task_log_info "Validating plugin manifest"
+task_log_context "Project directory: $root"
+task_log_command "omarchy plugin validate <project>"
+if "$OMARCHY" plugin validate "$root"; then
+  task_log_ok "Plugin manifest is valid"
+else
+  status=$?
+  task_log_error "Plugin manifest validation failed"
+  exit "$status"
+fi

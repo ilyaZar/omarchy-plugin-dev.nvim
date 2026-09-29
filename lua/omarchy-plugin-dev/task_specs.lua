@@ -11,12 +11,16 @@ local function metadata(root, action)
   }
 end
 
-local function components(set_diagnostics)
-  if set_diagnostics == nil then
-    set_diagnostics = true
-  end
+local function lint_components()
   return {
-    { "on_output_quickfix", open = false, set_diagnostics = set_diagnostics },
+    {
+      "on_output_quickfix",
+      errorformat = "%t%*[^:]: %f:%l:%c: %m,%-G%.%#",
+      items_only = true,
+      open_on_match = false,
+      set_diagnostics = true,
+    },
+    "on_result_diagnostics",
     "default",
   }
 end
@@ -26,9 +30,13 @@ local function plugin_root()
   return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
 end
 
+local function script_path(name)
+  return vim.fs.joinpath(plugin_root(), "scripts", name)
+end
+
 local function deploy_command(root)
   local values = config.get()
-  local command = { vim.fs.joinpath(plugin_root(), "scripts", "deploy"), "--apply" }
+  local command = { script_path("deploy"), "--apply" }
   if values.enable_auto then
     command[#command + 1] = "--enable-auto"
   end
@@ -136,10 +144,13 @@ end
 local function check_steps(root)
   local values = config.get()
   local validate = {
-    name = "Validate Omarchy plugin manifest",
-    cmd = { values.executables.omarchy, "plugin", "validate", root },
+    name = "Validate manifest.json",
+    cmd = { script_path("validate-manifest") },
     cwd = root,
-    components = components(),
+    env = {
+      OMARCHY_PLUGIN_DEV_OMARCHY = values.executables.omarchy,
+    },
+    components = { "default" },
     metadata = metadata(root, "validate"),
   }
   local steps = { validate }
@@ -147,16 +158,20 @@ local function check_steps(root)
   if #files > 0 then
     local lint_executable = require("omarchy-plugin-dev.qmllint").executable()
       or values.executables.qmllint
-    local lint_command = { lint_executable }
+    local lint_command = { script_path("lint-qml") }
     for _, import_path in ipairs(require("omarchy-plugin-dev.qml").import_paths()) do
       vim.list_extend(lint_command, { "-I", import_path })
     end
     vim.list_extend(lint_command, files)
     steps[#steps + 1] = {
-      name = "Lint Omarchy plugin QML",
+      name = "Lint QML code",
       cmd = lint_command,
       cwd = root,
-      components = components(false),
+      env = {
+        OMARCHY_PLUGIN_DEV_QMLLINT = lint_executable,
+        OMARCHY_PLUGIN_DEV_QML_FILE_COUNT = tostring(#files),
+      },
+      components = lint_components(),
       metadata = metadata(root, "lint"),
     }
   end
@@ -191,7 +206,7 @@ function M.test(root)
     name = "Omarchy Plugin: test",
     cmd = vim.deepcopy(definition.command),
     cwd = root,
-    components = components(),
+    components = { "default" },
     metadata = metadata(root, "test"),
   }
   if definition.description then
@@ -211,7 +226,7 @@ local function deploy(root)
       OMARCHY_PLUGIN_DEV_OMARCHY = executables.omarchy,
       OMARCHY_PLUGIN_DEV_RSYNC = executables.rsync,
     },
-    components = components(),
+    components = { "default" },
   }, root, "deploy", "Deploy Omarchy plugin")
 end
 
@@ -219,8 +234,11 @@ local function restart(root)
   local executable = config.get().executables.omarchy
   return finalize({
     name = "Restart Omarchy shell once",
-    cmd = { executable, "restart", "shell" },
+    cmd = { script_path("restart-shell") },
     cwd = root,
+    env = {
+      OMARCHY_PLUGIN_DEV_OMARCHY = executable,
+    },
     components = { "default" },
   }, root, "restart", "Restart Omarchy shell once")
 end
@@ -264,7 +282,9 @@ function M.rebuild(root)
   if test_state == "missing" then
     if type(config.get().tasks.rebuild) ~= "function" then
       return nil,
-        "No test task is configured. Run :OmaDevInit, then edit " .. project.tasks_path(root)
+        "No test task is configured. Run :OmaDevInit, then edit " .. project.existing_tasks_path(
+          root
+        )
     end
   else
     test_spec = assert(test_spec)
@@ -292,19 +312,17 @@ end
 
 function M.logs(root)
   local values = config.get()
-  local command = {
-    values.executables.journalctl,
-    "--user",
-    "-b",
-    values.logs.match,
-  }
+  local command = { script_path("shell-logs"), values.logs.match }
   if values.logs.follow then
-    command[#command + 1] = "-f"
+    command[#command + 1] = "--follow"
   end
   local spec = {
     name = "Omarchy Plugin: shell logs",
     cmd = command,
     cwd = root,
+    env = {
+      OMARCHY_PLUGIN_DEV_JOURNALCTL = values.executables.journalctl,
+    },
     components = { "default" },
     metadata = metadata(root, "logs"),
   }
@@ -324,7 +342,7 @@ function M.custom(root, name)
       name = "Omarchy Plugin: " .. (definition.description or name),
       cmd = vim.deepcopy(definition.command),
       cwd = root,
-      components = components(),
+      components = { "default" },
       metadata = metadata(root, name),
     }
   elseif type(configured) == "table" then

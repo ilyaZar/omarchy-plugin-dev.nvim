@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
+
+if (( $# < 1 || $# > 2 )); then
+  task_log_error "Usage: $0 <journal-match> [--follow]"
+  exit 2
+fi
+
+JOURNALCTL=${OMARCHY_PLUGIN_DEV_JOURNALCTL:-journalctl}
+command -v "$JOURNALCTL" >/dev/null 2>&1 || {
+  task_log_error "$JOURNALCTL is not executable"
+  exit 1
+}
+
+match=$1
+follow=false
+if [[ ${2:-} == "--follow" ]]; then
+  follow=true
+elif (( $# == 2 )); then
+  task_log_error "unknown option: $2"
+  exit 2
+fi
+
+root=$(pwd -P)
+command=("$JOURNALCTL" --user -b "$match")
+display="journalctl --user -b <match>"
+if [[ $follow == true ]]; then
+  command+=("-f")
+  display+=" -f"
+fi
+
+if [[ $follow == true ]]; then
+  task_log_info "Following Omarchy shell logs"
+else
+  task_log_info "Reading Omarchy shell logs"
+fi
+task_log_context "Project directory: $root"
+task_log_context "Journal match: $match"
+task_log_command "$display"
+exec "${command[@]}"

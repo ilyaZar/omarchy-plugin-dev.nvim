@@ -107,7 +107,7 @@ function M.dashboard(info, bufnr)
     "  h  Build and restart      b  Test, build, restart",
     "  t  Test                  v  Health",
     "  p  Project tasks         i  Initialize project",
-    "  e  Edit tasks.json",
+    "  e  Edit task configuration",
     "  q  Close",
   }
 

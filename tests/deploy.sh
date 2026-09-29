@@ -15,7 +15,7 @@ printf '%s\n' 'import QtQuick' 'Item {}' >"$project/Service.qml"
 printf '%s\n' \
   '{"schemaVersion":1,"id":"dev.deploy-test","name":"Deploy Test","version":"1","kinds":["service"],"entryPoints":{"service":"Service.qml"}}' \
   >"$project/manifest.json"
-printf '%s\n' '{}' >"$project/.omarchy-plugin-dev/tasks.json"
+printf '%s\n' '{}' >"$project/.omarchy-plugin-dev/task-config.json"
 
 OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --dry-run "$project" >/dev/null
 [[ ! -e $plugins/dev.deploy-test ]] || {
@@ -23,8 +23,18 @@ OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --dry-run "$project" >/dev/null
   exit 1
 }
 
-OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" >/dev/null
+OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --apply "$project" >"$test_root/deploy.out"
 [[ -f $plugins/dev.deploy-test/Service.qml ]]
+rg -Fq 'Preparing validated deployment' "$test_root/deploy.out"
+rg -Fq 'plugin validate' "$test_root/deploy.out"
+rg -Fq 'Prepared validated plugin copy' "$test_root/deploy.out"
+rg -Fq 'Installing plugin files' "$test_root/deploy.out"
+rg -Fq 'rsync' "$test_root/deploy.out"
+rg -Fq 'Installed plugin files: dev.deploy-test' "$test_root/deploy.out"
+if rg -Fqi restart "$test_root/deploy.out"; then
+  printf '[error] deployment output claims responsibility for restarting the shell\n' >&2
+  exit 1
+fi
 [[ ! -e $plugins/dev.deploy-test/.omarchy-plugin-dev ]]
 
 printf '%s\n' stale >"$plugins/dev.deploy-test/stale.txt"
@@ -100,9 +110,15 @@ env "${deploy_env[@]}" OMARCHY_PLUGINS_DIR="$plugins" \
 [[ $(wc -l <"$enable_log") -eq 1 ]]
 
 env "${deploy_env[@]}" OMARCHY_PLUGINS_DIR="$plugins" \
-  ./scripts/deploy --apply --enable-auto --enable-first-install "$project" >/dev/null
+  ./scripts/deploy --apply --enable-auto --enable-first-install "$project" >"$test_root/enable.out"
 [[ $(wc -l <"$enable_log") -eq 2 ]]
 [[ $(wc -l <"$enable_attempt_log") -eq 4 ]]
 [[ $(wc -l <"$rescan_log") -eq 4 ]]
+rg -Fq 'Enabling plugin' "$test_root/enable.out"
+rg -Fq 'shell ping' "$test_root/enable.out"
+rg -Fq 'shell rescanPlugins' "$test_root/enable.out"
+rg -Fq 'plugin list --json' "$test_root/enable.out"
+rg -Fq 'plugin enable dev.deploy-test' "$test_root/enable.out"
+rg -Fq 'Enabled plugin: dev.deploy-test' "$test_root/enable.out"
 
 printf '[ok] deployment helper\n'

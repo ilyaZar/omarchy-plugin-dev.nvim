@@ -5,3 +5,5 @@ cd "$(dirname "$0")/.."
 "${NVIM:-nvim}" --clean --headless -u tests/init.lua \
   -c "lua dofile('tests/runner.lua')"
 ./tests/deploy.sh
+./tests/restart_shell.sh
+./tests/task_wrappers.sh

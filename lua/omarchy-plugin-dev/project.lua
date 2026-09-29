@@ -96,7 +96,20 @@ function M.detect_file(bufnr_or_path)
 end
 
 function M.tasks_path(root)
+  return vim.fs.joinpath(root, ".omarchy-plugin-dev", "task-config.json")
+end
+
+local function legacy_tasks_path(root)
   return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
+end
+
+function M.existing_tasks_path(root)
+  local path = M.tasks_path(root)
+  if vim.fn.filereadable(path) == 1 then
+    return path
+  end
+  local legacy_path = legacy_tasks_path(root)
+  return vim.fn.filereadable(legacy_path) == 1 and legacy_path or path
 end
 
 local function ensure_gitignore(root)
@@ -128,21 +141,21 @@ end
 function M.decode_tasks(text, source_path)
   local ok, data = pcall(vim.json.decode, text)
   if not ok then
-    return nil, string.format("tasks.json is not valid JSON at %s: %s", source_path, data)
+    return nil, string.format("task configuration is not valid JSON at %s: %s", source_path, data)
   end
   if not is_object(data) then
-    return nil, "tasks.json must contain an object"
+    return nil, "task configuration must contain an object"
   end
   for key in pairs(data) do
     if key ~= "version" and key ~= "tasks" then
-      return nil, string.format("tasks.json has unknown top-level field '%s'", key)
+      return nil, string.format("task configuration has unknown top-level field '%s'", key)
     end
   end
   if data.version ~= 1 then
-    return nil, "tasks.json version must be the number 1"
+    return nil, "task configuration version must be the number 1"
   end
   if not is_object(data.tasks) then
-    return nil, "tasks.json tasks must be an object"
+    return nil, "task configuration tasks must be an object"
   end
 
   for name, task in pairs(data.tasks) do
@@ -174,7 +187,7 @@ function M.decode_tasks(text, source_path)
 end
 
 function M.load_tasks(root)
-  local path = M.tasks_path(root)
+  local path = M.existing_tasks_path(root)
   if vim.fn.filereadable(path) ~= 1 then
     return { version = 1, tasks = {} }, nil, false
   end
@@ -365,8 +378,9 @@ function M.initialize(root, opts)
   end
 
   local path = M.tasks_path(info.root)
-  if vim.fn.filereadable(path) == 1 and not opts.force then
-    return nil, string.format("configuration already exists: %s", path), "exists"
+  local existing_path = M.existing_tasks_path(info.root)
+  if vim.fn.filereadable(existing_path) == 1 and not opts.force then
+    return nil, string.format("configuration already exists: %s", existing_path), "exists"
   end
 
   local directory = vim.fs.dirname(path)
@@ -396,6 +410,10 @@ function M.initialize(root, opts)
   local write_error = vim.fn.writefile(lines, path)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
+  end
+  local legacy_path = legacy_tasks_path(info.root)
+  if legacy_path ~= path and vim.fn.filereadable(legacy_path) == 1 then
+    vim.fn.delete(legacy_path)
   end
   local _, _, ignore_error = ensure_gitignore(info.root)
   if ignore_error then

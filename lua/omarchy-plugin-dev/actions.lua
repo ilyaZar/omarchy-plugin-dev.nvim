@@ -48,7 +48,7 @@ function M.edit_tasks(bufnr)
   if not info then
     return
   end
-  local path = require("omarchy-plugin-dev.project").tasks_path(info.root)
+  local path = require("omarchy-plugin-dev.project").existing_tasks_path(info.root)
   if vim.fn.filereadable(path) ~= 1 then
     require("omarchy-plugin-dev.messages").show(
       "Project tasks are not initialized. Run :OmaDevInit first.",
@@ -67,7 +67,7 @@ function M.init_project(bufnr, opts)
     return
   end
   local project = require("omarchy-plugin-dev.project")
-  local path = project.tasks_path(info.root)
+  local path = project.existing_tasks_path(info.root)
 
   local function initialize(force, test_command)
     local created, init_error = project.initialize(info.root, {
@@ -117,10 +117,10 @@ function M.init_project(bufnr, opts)
     return choose_test_command(opts.force == true)
   end
 
-  vim.ui.select({ "Keep existing file", "Overwrite tasks.json" }, {
+  vim.ui.select({ "Keep existing file", "Overwrite task configuration" }, {
     prompt = path .. " already exists",
   }, function(choice)
-    if choice == "Overwrite tasks.json" then
+    if choice == "Overwrite task configuration" then
       choose_test_command(true)
     end
   end)

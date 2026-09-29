@@ -186,6 +186,10 @@ local initialized = assert(project.initialize(root, {
   test_command = test_candidates[1].command,
   validator = accept_validation,
 }))
+assert(
+  initialized == vim.fs.joinpath(root, ".omarchy-plugin-dev", "task-config.json"),
+  "initialization used the generic tasks.json name"
+)
 local gitignore_path = vim.fs.joinpath(root, ".gitignore")
 assert(vim.fn.filereadable(gitignore_path) == 1, "initialization did not create .gitignore")
 assert(
@@ -201,7 +205,7 @@ write(initialized, { '{"version":1,"tasks":{"test":{"command":["custom-test"]}}}
 local created_again, _, state = project.initialize(root, { validator = accept_validation })
 assert(created_again == nil and state == "exists", "initialization overwrote without approval")
 local preserved = assert(project.load_tasks(root))
-assert(preserved.tasks.test.command[1] == "custom-test", "existing tasks.json was modified")
+assert(preserved.tasks.test.command[1] == "custom-test", "existing task configuration was modified")
 assert(
   project.initialize(root, {
     force = true,
@@ -219,6 +223,30 @@ end
 assert(ignore_count == 1, "initialization duplicated the .gitignore entry")
 assert(vim.fn.filereadable(vim.fs.joinpath(root, ".qmlls.ini")) == 0, "dead LSP config was created")
 assert(project.test_state(root).kind == "configured", "configured test runner state is wrong")
+
+local legacy_root = vim.fs.joinpath(temp_root, "plugin with legacy task config")
+create_project(legacy_root)
+local legacy_path = vim.fs.joinpath(legacy_root, ".omarchy-plugin-dev", "tasks.json")
+write(legacy_path, { '{"version":1,"tasks":{"test":{"command":["legacy-test"]}}}' })
+assert(
+  project.existing_tasks_path(legacy_root) == legacy_path,
+  "legacy task configuration was not discovered"
+)
+local legacy_data = assert(project.load_tasks(legacy_root))
+assert(legacy_data.tasks.test.command[1] == "legacy-test", "legacy task configuration changed")
+local legacy_reinit, _, legacy_state = project.initialize(legacy_root, {
+  validator = accept_validation,
+})
+assert(legacy_reinit == nil and legacy_state == "exists", "legacy configuration was overwritten")
+local migrated_path = assert(project.initialize(legacy_root, {
+  force = true,
+  validator = accept_validation,
+}))
+assert(
+  migrated_path == project.tasks_path(legacy_root) and vim.fn.filereadable(migrated_path) == 1,
+  "explicit overwrite did not use task-config.json"
+)
+assert(vim.fn.filereadable(legacy_path) == 0, "explicit overwrite retained legacy tasks.json")
 
 local unaggregated_root = vim.fs.joinpath(temp_root, "plugin with unaggregated tests")
 create_project(unaggregated_root)
@@ -440,18 +468,25 @@ local check_spec = assert(task_specs.check(project.canonical(root)))
 assert(check_spec.cwd == project.canonical(root), "check task cwd is wrong")
 local validate_step = check_spec.strategy.tasks[1]
 assert(
-  vim.deep_equal(validate_step.cmd, {
-    "omarchy",
-    "plugin",
-    "validate",
-    project.canonical(root),
-  }),
-  "validation argv is wrong"
+  validate_step.cmd[1]:match("/scripts/validate%-manifest$") and #validate_step.cmd == 1,
+  "validation task does not use the manifest wrapper"
+)
+assert(
+  validate_step.env.OMARCHY_PLUGIN_DEV_OMARCHY == "omarchy",
+  "validation wrapper did not receive the configured Omarchy executable"
+)
+assert(
+  vim.deep_equal(validate_step.components, { "default" }),
+  "validation task still treats ordinary output as diagnostics"
 )
 local lint_step = check_spec.strategy.tasks[2]
 local lint_info = assert(require("omarchy-plugin-dev.qmllint").resolve())
 assert(lint_info.major >= 6, "automatic qmllint resolution selected a pre-Qt-6 executable")
-assert(lint_step.cmd[1] == lint_info.path, "lint task does not use the resolved Qt 6 qmllint")
+assert(lint_step.cmd[1]:match("/scripts/lint%-qml$"), "lint task does not use the QML wrapper")
+assert(
+  lint_step.env.OMARCHY_PLUGIN_DEV_QMLLINT == lint_info.path,
+  "lint wrapper did not receive the resolved Qt 6 qmllint"
+)
 assert(lint_step.cmd[2] == "-I", "lint task lost the import flag")
 assert(vim.tbl_contains(lint_step.cmd, qml_js_path), "lint task omitted QML JavaScript")
 assert(
@@ -484,8 +519,22 @@ for _, import_path in ipairs(lint_import_paths) do
 end
 assert(has_qs_bridge, "lint task lost the qs namespace bridge")
 assert(
-  lint_step.components[1].set_diagnostics == false,
-  "lint task still duplicates language-server diagnostics"
+  lint_step.components[1].items_only == true
+    and lint_step.components[1].set_diagnostics == true
+    and lint_step.components[1].errorformat ~= nil,
+  "lint task does not restrict diagnostics to parsed qmllint messages"
+)
+local lint_items = vim.fn.getqflist({
+  lines = {
+    "[INFO] Linting plugin QML",
+    "Warning: /tmp/Test.qml:2:3: example warning [test]",
+    "source context",
+  },
+  efm = lint_step.components[1].errorformat,
+}).items
+assert(
+  #lint_items == 1 and lint_items[1].valid == 1 and lint_items[1].type == "W",
+  "lint errorformat did not isolate the qmllint diagnostic"
 )
 assert(lint_step.cwd == project.canonical(root), "lint task cwd is wrong")
 config.setup()
@@ -496,6 +545,19 @@ assert(
   "relative test executable was not anchored to the project root"
 )
 assert(test_spec.cwd == project.canonical(root), "test task cwd is wrong")
+assert(
+  vim.deep_equal(test_spec.components, { "default" }),
+  "project test task still treats arbitrary output as diagnostics"
+)
+
+local logs_spec = assert(task_specs.logs(project.canonical(root)))
+assert(logs_spec.cmd[1]:match("/scripts/shell%-logs$"), "logs task does not use its wrapper")
+assert(logs_spec.cmd[2] == "_COMM=quickshell", "logs wrapper lost the journal match")
+assert(logs_spec.cmd[3] == "--follow", "logs wrapper lost follow mode")
+assert(
+  logs_spec.env.OMARCHY_PLUGIN_DEV_JOURNALCTL == "journalctl",
+  "logs wrapper did not receive the configured journalctl executable"
+)
 
 local no_test_root = vim.fs.joinpath(temp_root, "plugin without tests")
 create_project(no_test_root)
@@ -540,6 +602,10 @@ assert(
   "build does not use the staged deployment helper"
 )
 assert(
+  vim.deep_equal(hot_reload_steps[2].components, { "default" }),
+  "deploy task still treats ordinary output as diagnostics"
+)
+assert(
   vim.tbl_contains(hot_reload_steps[2].cmd, "--enable-auto"),
   "build does not enable each deployment by default"
 )
@@ -548,8 +614,12 @@ assert(
   "build does not enable a first installation by default"
 )
 assert(
-  vim.deep_equal(hot_reload_steps[3].cmd, { "omarchy", "restart", "shell" }),
-  "build does not expose the shell restart as an Overseer step"
+  hot_reload_steps[3].cmd[1]:match("/scripts/restart%-shell$"),
+  "build does not use the shell restart helper"
+)
+assert(
+  hot_reload_steps[3].env.OMARCHY_PLUGIN_DEV_OMARCHY == "omarchy",
+  "shell restart helper did not receive the configured Omarchy executable"
 )
 
 config.setup({ enable_auto = false, enable_first_install = false })
@@ -568,7 +638,7 @@ local rebuild_spec = assert(task_specs.rebuild(project.canonical(root)))
 local rebuild_steps = rebuild_spec.strategy.tasks
 local restart_count = 0
 for _, step in ipairs(rebuild_steps) do
-  if step.cmd and vim.deep_equal(step.cmd, { "omarchy", "restart", "shell" }) then
+  if step.metadata and step.metadata.omarchy_plugin_dev_action == "restart" then
     restart_count = restart_count + 1
   end
 end

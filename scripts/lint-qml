@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
+
+QMLLINT=${OMARCHY_PLUGIN_DEV_QMLLINT:-qmllint}
+QML_FILE_COUNT=${OMARCHY_PLUGIN_DEV_QML_FILE_COUNT:-0}
+command -v "$QMLLINT" >/dev/null 2>&1 || {
+  task_log_error "$QMLLINT is not executable"
+  exit 1
+}
+
+root=$(pwd -P)
+task_log_info "Linting plugin QML"
+task_log_context "Project directory: $root"
+task_log_context "Source files: $QML_FILE_COUNT"
+task_log_command "qmllint -I <import-paths> <qml-files>"
+if "$QMLLINT" "$@"; then
+  task_log_ok "QML lint completed without errors"
+else
+  status=$?
+  task_log_error "QML lint failed"
+  exit "$status"
+fi

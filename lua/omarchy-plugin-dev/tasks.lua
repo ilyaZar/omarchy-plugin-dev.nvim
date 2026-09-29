@@ -92,7 +92,8 @@ function M.test(root)
   if not spec then
     if state == "missing" then
       messages.show(
-        "No test task is configured. Run :OmaDevInit, then edit " .. project.tasks_path(root),
+        "No test task is configured. Run :OmaDevInit, then edit "
+          .. project.existing_tasks_path(root),
         vim.log.levels.INFO
       )
     else
@@ -131,11 +132,11 @@ function M.rebuild(root)
 end
 
 function M.logs(root)
-  local spec = assert(specs.logs(root))
-  if not require_executable(spec.cmd[1], root, "Shell logs") then
+  local executable = require("omarchy-plugin-dev.config").get().executables.journalctl
+  if not require_executable(executable, root, "Shell logs") then
     return nil
   end
-  return start(spec)
+  return start(assert(specs.logs(root)))
 end
 
 local function run_custom(root, name)
