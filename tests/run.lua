@@ -46,13 +46,14 @@ for _, name in ipairs({
   "OmaDevInit",
   "OmaDevTest",
   "OmaDevHotReload",
-  "OmaDevRebuild",
+  "OmaDevBuild",
   "OmaDevHealth",
 }) do
   assert(vim.fn.exists(":" .. name) == 2, name .. " command is missing")
 end
 for _, name in ipairs({
   "OmaDevCheck",
+  "OmaDevRebuild",
   "OmaDevReload",
   "OmaDevCheckReload",
   "OmaDevTasks",
@@ -67,7 +68,7 @@ for _, name in ipairs({
   "dashboard",
   "test",
   "hot_reload",
-  "rebuild",
+  "build",
   "health",
   "edit_tasks",
   "init_project",
@@ -561,37 +562,37 @@ assert(
 
 local no_test_root = vim.fs.joinpath(temp_root, "plugin without tests")
 create_project(no_test_root)
-local missing_test_rebuild, missing_test_error = task_specs.rebuild(project.canonical(no_test_root))
-assert(missing_test_rebuild == nil, "test-and-build accepted a missing test task")
+local missing_test_build, missing_test_error = task_specs.build(project.canonical(no_test_root))
+assert(missing_test_build == nil, "test-and-build accepted a missing test task")
 assert(
   missing_test_error and missing_test_error:find("No test task is configured", 1, true),
   "test-and-build did not explain its missing test task"
 )
 config.setup({
   tasks = {
-    rebuild = { cmd = { "/bin/true" }, name = "Custom rebuild" },
+    build = { cmd = { "/bin/true" }, name = "Custom build" },
   },
 })
-local custom_rebuild = assert(task_specs.rebuild(project.canonical(no_test_root)))
-assert(vim.deep_equal(custom_rebuild.cmd, { "/bin/true" }), "custom rebuild override was ignored")
-config.setup({ tasks = { rebuild = { name = "Partial rebuild override" } } })
+local custom_build = assert(task_specs.build(project.canonical(no_test_root)))
+assert(vim.deep_equal(custom_build.cmd, { "/bin/true" }), "custom build override was ignored")
+config.setup({ tasks = { build = { name = "Partial build override" } } })
 assert(
-  task_specs.rebuild(project.canonical(no_test_root)) == nil,
-  "partial rebuild override bypassed the required test"
+  task_specs.build(project.canonical(no_test_root)) == nil,
+  "partial build override bypassed the required test"
 )
 local function_default
 config.setup({
   tasks = {
-    rebuild = function(context)
+    build = function(context)
       function_default = context.default
-      context.default.name = "Function rebuild"
+      context.default.name = "Function build"
       return context.default
     end,
   },
 })
-local function_rebuild = assert(task_specs.rebuild(project.canonical(root)))
-assert(function_default ~= nil, "rebuild function override lost its default spec")
-assert(function_rebuild.name == "Function rebuild", "rebuild function override was not applied")
+local function_build = assert(task_specs.build(project.canonical(root)))
+assert(function_default ~= nil, "build function override lost its default spec")
+assert(function_build.name == "Function build", "build function override was not applied")
 config.setup()
 
 local hot_reload_spec = assert(task_specs.hot_reload(project.canonical(root)))
@@ -634,21 +635,21 @@ assert(
 )
 config.setup()
 
-local rebuild_spec = assert(task_specs.rebuild(project.canonical(root)))
-local rebuild_steps = rebuild_spec.strategy.tasks
+local build_spec = assert(task_specs.build(project.canonical(root)))
+local build_steps = build_spec.strategy.tasks
 local restart_count = 0
-for _, step in ipairs(rebuild_steps) do
+for _, step in ipairs(build_steps) do
   if step.metadata and step.metadata.omarchy_plugin_dev_action == "restart" then
     restart_count = restart_count + 1
   end
 end
 assert(restart_count == 1, "test-and-build must restart the shell exactly once")
 assert(
-  rebuild_steps[2].metadata.omarchy_plugin_dev_action == "test",
-  "configured test was silently omitted from the rebuild"
+  build_steps[2].metadata.omarchy_plugin_dev_action == "test",
+  "configured test was silently omitted from the build"
 )
 assert(
-  rebuild_steps[#rebuild_steps].metadata.omarchy_plugin_dev_action == "restart",
+  build_steps[#build_steps].metadata.omarchy_plugin_dev_action == "restart",
   "test-and-build does not end with the shell restart"
 )
 
@@ -704,12 +705,12 @@ assert(project.initialize(unavailable_test_root, {
   validator = accept_validation,
 }))
 assert(
-  tasks.rebuild(project.canonical(unavailable_test_root)) == nil,
-  "rebuild silently skipped an unavailable test"
+  tasks.build(project.canonical(unavailable_test_root)) == nil,
+  "build silently skipped an unavailable test"
 )
 assert(
   #notifications == 1 and notifications[1]:find("Test is unavailable", 1, true),
-  "rebuild did not explain the unavailable configured test"
+  "build did not explain the unavailable configured test"
 )
 rawset(vim, "notify", original_notify)
 config.setup()

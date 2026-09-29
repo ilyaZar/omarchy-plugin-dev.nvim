@@ -76,11 +76,11 @@ COMMANDS                                            *omarchy-plugin-dev-commands
     Check, stage, validate, and deploy the project, then restart the Omarchy
     shell exactly once.
 
-                                                            *:OmaDevRebuild*
-:OmaDevRebuild
+                                                            *:OmaDevBuild*
+:OmaDevBuild
     Check, run the configured test, deploy, then restart the shell exactly
     once. A missing test task or unavailable test executable stops the
-    default workflow. A complete tasks.rebuild override owns its test policy.
+    default workflow. A complete tasks.build override owns its test policy.
 
                                                              *:OmaDevHealth*
 :OmaDevHealth
@@ -113,7 +113,7 @@ Call setup through a plugin manager's opts or directly: >lua
     mappings = {
       enabled = true,
       hot_reload = "<C-b>",
-      rebuild = "<C-S-b>",
+      build = "<C-S-b>",
       test = false,
     },
     executables = {

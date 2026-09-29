@@ -262,12 +262,12 @@ function M.hot_reload(root)
   )
 end
 
-function M.rebuild(root)
-  if is_complete_table_override("rebuild") then
+function M.build(root)
+  if is_complete_table_override("build") then
     return finalize(
-      apply_override("rebuild", root, nil),
+      apply_override("build", root, nil),
       root,
-      "rebuild",
+      "build",
       "Omarchy Plugin: custom test and build"
     ),
       nil,
@@ -280,7 +280,7 @@ function M.rebuild(root)
     return nil, test_error
   end
   if test_state == "missing" then
-    if type(config.get().tasks.rebuild) ~= "function" then
+    if type(config.get().tasks.build) ~= "function" then
       return nil,
         "No test task is configured. Run :OmaDevInit, then edit " .. project.existing_tasks_path(
           root
@@ -299,12 +299,12 @@ function M.rebuild(root)
     cwd = root,
     strategy = { "orchestrator", tasks = steps },
     components = { "default" },
-    metadata = metadata(root, "rebuild"),
+    metadata = metadata(root, "build"),
   }
   local finalized = finalize(
-    apply_override("rebuild", root, spec),
+    apply_override("build", root, spec),
     root,
-    "rebuild",
+    "build",
     "Omarchy Plugin: test, build, and restart"
   )
   return finalized, nil, test_spec

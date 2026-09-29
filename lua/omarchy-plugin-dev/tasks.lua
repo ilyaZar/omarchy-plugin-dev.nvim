@@ -9,7 +9,7 @@ local core_names = {
   deploy = true,
   hot_reload = true,
   logs = true,
-  rebuild = true,
+  build = true,
   test = true,
 }
 
@@ -114,8 +114,8 @@ function M.hot_reload(root)
   return start(specs.hot_reload(root))
 end
 
-function M.rebuild(root)
-  local spec, spec_error, test_spec = specs.rebuild(root)
+function M.build(root)
+  local spec, spec_error, test_spec = specs.build(root)
   if not spec then
     show_spec_error(spec_error)
     return nil
@@ -216,7 +216,7 @@ function M.picker(root)
     {
       label = "Test, build, and restart",
       action = function()
-        M.rebuild(root)
+        M.build(root)
       end,
     },
     {

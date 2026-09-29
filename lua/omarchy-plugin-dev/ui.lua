@@ -121,7 +121,7 @@ function M.dashboard(info, bufnr)
         actions.hot_reload(bufnr)
       end,
       b = function()
-        actions.rebuild(bufnr)
+        actions.build(bufnr)
       end,
       p = function()
         actions.tasks(bufnr)

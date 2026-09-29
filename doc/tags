@@ -1,8 +1,8 @@
 :OmaDev	omarchy-plugin-dev.txt	/*:OmaDev*
+:OmaDevBuild	omarchy-plugin-dev.txt	/*:OmaDevBuild*
 :OmaDevHealth	omarchy-plugin-dev.txt	/*:OmaDevHealth*
 :OmaDevHotReload	omarchy-plugin-dev.txt	/*:OmaDevHotReload*
 :OmaDevInit	omarchy-plugin-dev.txt	/*:OmaDevInit*
-:OmaDevRebuild	omarchy-plugin-dev.txt	/*:OmaDevRebuild*
 :OmaDevTest	omarchy-plugin-dev.txt	/*:OmaDevTest*
 omarchy-plugin-dev-build	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-build*
 omarchy-plugin-dev-commands	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-commands*

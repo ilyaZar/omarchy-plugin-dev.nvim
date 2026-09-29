@@ -35,8 +35,8 @@ command("OmaDevHotReload", function()
 end, {
   desc = "Validate, deploy, and restart the Omarchy shell once",
 })
-command("OmaDevRebuild", function()
-  require("omarchy-plugin-dev.actions").rebuild(0)
+command("OmaDevBuild", function()
+  require("omarchy-plugin-dev.actions").build(0)
 end, {
   desc = "Test, deploy, and restart the Omarchy shell once",
 })

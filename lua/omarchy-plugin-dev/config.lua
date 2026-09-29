@@ -11,7 +11,7 @@ local M = {}
 ---@class OmarchyPluginDevMappings
 ---@field enabled boolean
 ---@field hot_reload string|false
----@field rebuild string|false
+---@field build string|false
 ---@field test string|false
 ---@field menu string|false
 
@@ -72,7 +72,7 @@ local defaults = {
   mappings = {
     enabled = true,
     hot_reload = "<C-b>",
-    rebuild = "<C-S-b>",
+    build = "<C-S-b>",
     test = "<localleader>t",
     menu = "<localleader>o",
   },

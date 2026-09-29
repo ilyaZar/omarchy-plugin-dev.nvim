@@ -33,11 +33,18 @@ Using [lazy.nvim][lazy]:
     "OmaDevInit",
     "OmaDevTest",
     "OmaDevHotReload",
-    "OmaDevRebuild",
+    "OmaDevBuild",
     "OmaDevHealth",
   },
   dependencies = { "stevearc/overseer.nvim" },
-  opts = {},
+  opts = {
+    mappings = {
+      hot_reload = "<C-b>",
+      build = "<C-S-b>",
+      test = "<localleader>t",
+      menu = "<localleader>o",
+    },
+  },
 }
 ```
 
@@ -73,14 +80,14 @@ custom tasks, or **Shell logs**. Run `:OmaDevHealth` to diagnose missing tools.
 
 ## Commands and mappings
 
-| Command            | Default key      | Action                           |
-| ------------------ | ---------------- | -------------------------------- |
-| `:OmaDev`          | `<localleader>o` | Open the project dashboard       |
-| `:OmaDevInit[!]`   |                  | Configure or replace task JSON   |
-| `:OmaDevTest`      | `<localleader>t` | Run the configured test command  |
-| `:OmaDevHotReload` | `<C-b>`          | Check, deploy, and restart       |
-| `:OmaDevRebuild`   | `<C-S-b>`        | Check, test, deploy, and restart |
-| `:OmaDevHealth`    |                  | Run the Neovim health check      |
+| Command            | Default key      | Action                          |
+| ------------------ | ---------------- | ------------------------------- |
+| `:OmaDev`          | `<localleader>o` | Open the project dashboard      |
+| `:OmaDevInit[!]`   |                  | Configure or replace task JSON  |
+| `:OmaDevTest`      | `<localleader>t` | Run the configured test command |
+| `:OmaDevHotReload` | `<C-b>`          | Check, deploy, and restart      |
+| `:OmaDevBuild`     | `<C-S-b>`        | Check, test, deploy, restart    |
+| `:OmaDevHealth`    |                  | Run the Neovim health check     |
 
 Mappings are normal-mode and buffer-local to detected plugin projects. Existing
 `<localleader>` mappings are preserved; build shortcuts take precedence. The
@@ -88,7 +95,7 @@ plugin never changes `vim.g.maplocalleader`.
 
 ## Build behavior
 
-Checks validate the manifest and lint QML. The default rebuild also requires
+Checks validate the manifest and lint QML. The default build also requires
 a configured test. Failed checks or tests stop deployment. Successful builds
 restart the shell once.
 
@@ -121,8 +128,8 @@ Inline diagnostic text is off by default; signs, underlines, and diagnostic
 pickers remain available. Set `diagnostics = false` to use Neovim's global
 settings.
 
-Set `mappings = false` to disable shortcuts, or change individual entries such
-as `mappings = { test = false }`.
+Change shortcuts in `opts.mappings`; set an entry or `mappings` to `false`
+to disable it.
 
 For mixed repositories, `qml_file_filter` selects which files receive plugin
 integration. See [the help file][help] or `:help omarchy-plugin-dev` for its

@@ -12,7 +12,7 @@ local reserved_task_names = {
   deploy = true,
   hot_reload = true,
   logs = true,
-  rebuild = true,
+  build = true,
 }
 
 local conventional_test_runners = {

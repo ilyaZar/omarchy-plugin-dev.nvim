@@ -29,9 +29,9 @@ function M.hot_reload(bufnr)
   return info and require("omarchy-plugin-dev.tasks").hot_reload(info.root) or nil
 end
 
-function M.rebuild(bufnr)
+function M.build(bufnr)
   local info = current(bufnr)
-  return info and require("omarchy-plugin-dev.tasks").rebuild(info.root) or nil
+  return info and require("omarchy-plugin-dev.tasks").build(info.root) or nil
 end
 
 function M.tasks(bufnr)
