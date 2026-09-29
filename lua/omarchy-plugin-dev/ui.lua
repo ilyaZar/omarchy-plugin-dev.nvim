@@ -8,7 +8,7 @@ local action_items = {
   { "h", "Build and restart", "hot_reload", "Check, deploy, then restart the shell" },
   { "b", "Test, build, restart", "build", "Check, test, deploy, then restart the shell" },
   { "t", "Test", "test", "Run the configured project test" },
-  { "v", "Health", "health", "Open the plugin's health report" },
+  { "v", "Health", "health", "Run the plugin's health check" },
   { "p", "Project tasks", "tasks", "Choose a project task to run" },
   {
     "i",
@@ -105,15 +105,13 @@ local function dashboard_rows(info, bufnr, width)
   local config = require("omarchy-plugin-dev.config").get()
   local project = require("omarchy-plugin-dev.project")
   local rows = {}
-  local function section(label, hint)
+  local function section(label)
     if #rows > 0 then
       rows[#rows + 1] = {}
     end
-    hint = hint and " " .. hint .. " " or ""
     rows[#rows + 1] = {
       { "  " .. label .. " ", { "DiagnosticOk", "Bold" } },
-      { hint, "Comment" },
-      { string.rep("-", math.max(width - #label - #hint - 5, 0)), "Comment" },
+      { string.rep("-", math.max(width - #label - 5, 0)), "Comment" },
     }
   end
   local function add(row)
@@ -152,27 +150,6 @@ local function dashboard_rows(info, bufnr, width)
   local overview = rows
   rows = {}
 
-  section("Build", config.config_file and "Enter: edit keybindings" or "Enter: settings help")
-  add(
-    field(
-      "hot reload",
-      mapping_label(config.mappings, "hot_reload"),
-      "DiagnosticInfo",
-      "check, deploy, restart shell",
-      "edit_config"
-    )
-  )
-  add(
-    field(
-      "build",
-      mapping_label(config.mappings, "build"),
-      "DiagnosticInfo",
-      "check, test, deploy, restart shell",
-      "edit_config"
-    )
-  )
-
-  align_details(rows)
   section("Actions")
   local label_width = 0
   for _, item in ipairs(action_items) do
@@ -194,6 +171,21 @@ local function dashboard_rows(info, bufnr, width)
       { detail, "Comment" },
     })
   end
+  section("Build keybindings")
+  local hint = config.config_file and "Enter: edit keybindings" or "Enter: settings help"
+  add(
+    field(
+      "hot reload",
+      mapping_label(config.mappings, "hot_reload"),
+      "DiagnosticInfo",
+      hint,
+      "edit_config"
+    )
+  )
+  add(
+    field("build", mapping_label(config.mappings, "build"), "DiagnosticInfo", hint, "edit_config")
+  )
+  align_details(rows)
   return { overview, rows }, validation_line
 end
 

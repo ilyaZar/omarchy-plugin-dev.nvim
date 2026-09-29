@@ -131,30 +131,33 @@ assert(
 assert(contents:find("confirm before replacing", 1, true), "initialization explanation is missing")
 assert(contents:find("Show configuration help", 1, true), "settings help fallback is missing")
 assert(
-  contents:find("Build", 1, true) < contents:find("  Actions ", 1, true),
+  contents:find("  Actions ", 1, true) < contents:find("Build keybindings", 1, true),
   "actions order changed"
 )
 assert(not contents:find("_COMM=custom", 1, true), "actions includes tool rows")
 assert(contents:find("<F5>", 1, true), "dashboard lost configured mapping")
 assert(contents:find("disabled", 1, true), "dashboard hides disabled mapping")
-assert(contents:find("Enter: settings help", 1, true), "build rows hide their Enter behavior")
-assert(selected_text(buf, win):find("hot reload:", 1, true), "actions did not select its first row")
+assert(contents:find("Run the plugin's health check", 1, true), "health description is unclear")
+assert(selected_text(buf, win):find("[h]", 1, true), "actions did not select its first row")
+key(buf, "G")()
+assert(selected_text(buf, win):find("build:", 1, true), "G did not select the last keybinding")
+assert(selected_text(buf, win):find("Enter: settings help", 1, true), "build row has no edit hint")
 key(buf, "j")()
-assert(selected_text(buf, win):find("build:", 1, true), "build mapping row is not selectable")
-key(buf, "j")()
-assert(selected_text(buf, win):find("[h]", 1, true), "navigation did not reach the lower actions")
+assert(selected_text(buf, win):find("build:", 1, true), "selection moved past the last row")
+key(buf, "k")()
+assert(selected_text(buf, win):find("hot reload:", 1, true), "hot reload row is not selectable")
+assert(
+  selected_text(buf, win):find("Enter: settings help", 1, true),
+  "hot reload row has no edit hint"
+)
 key(buf, "k")()
 assert(
-  selected_text(buf, win):find("build:", 1, true),
-  "navigation did not return to the build rows"
+  selected_text(buf, win):find("[c]", 1, true),
+  "navigation did not skip the keybindings heading"
 )
-key(buf, "G")()
-assert(selected_text(buf, win):find("[c]", 1, true), "G did not select last action")
-key(buf, "j")()
-assert(selected_text(buf, win):find("[c]", 1, true), "selection moved past last action")
 key(buf, "gg")()
 key(buf, "k")()
-assert(selected_text(buf, win):find("hot reload:", 1, true), "selection moved before first row")
+assert(selected_text(buf, win):find("[h]", 1, true), "selection moved before the first row")
 for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
   assert(not line:match("%[h%].-%[b%]"), "actions still share a row")
 end
@@ -198,8 +201,6 @@ for _, tab in ipairs({ "1", "2" }) do
 end
 
 for index, method in ipairs({
-  "edit_config",
-  "edit_config",
   "hot_reload",
   "build",
   "test",
@@ -207,6 +208,8 @@ for index, method in ipairs({
   "tasks",
   "init_project",
   "edit_tasks",
+  "edit_config",
+  "edit_config",
   "edit_config",
 }) do
   local action_buf, action_win = ui.dashboard(info, source_buf)
@@ -226,7 +229,15 @@ assert(
   text(settings_buf):find("Open my settings.lua", 1, true),
   "settings file explanation is missing"
 )
-assert(text(settings_buf):find("Enter: edit keybindings", 1, true), "edit hint is missing")
+local hint_count = 0
+for _, line in ipairs(vim.api.nvim_buf_get_lines(settings_buf, 0, -1, false)) do
+  if line:find("Enter: edit keybindings", 1, true) then
+    assert(line:match("^  [%w ]+:"), "edit hint is not on a keybinding row")
+    hint_count = hint_count + 1
+  end
+end
+assert(hint_count == 2, "each keybinding row needs its own edit hint")
+key(settings_buf, "G")()
 key(settings_buf, "<CR>")()
 assert(calls[#calls][1] == "edit_config", "build row Enter did not open settings")
 
