@@ -1,6 +1,6 @@
 # omarchy-plugin-dev.nvim
 
-[![Neovim][neovim-badge]][neovim] [![Lua][lua-badge]][lua]
+[![Neovim][neovim-badge]][neovim] [![Lua][lua-badge]][lua] [![CI][ci-badge]][ci]
 
 A Neovim workflow for developing [Omarchy Quattro][omarchy] shell plugins
 written in QML.
@@ -157,6 +157,9 @@ See [contributor notes](CONTRIBUTING.md) for smoke-test setup.
 
 [MIT](LICENSE) © 2026 IlyaZar.
 
+[ci]: https://github.com/ilyaZar/omarchy-plugin-dev.nvim/actions/workflows/check.yml
+[ci-badge]:
+  https://img.shields.io/github/actions/workflow/status/ilyaZar/omarchy-plugin-dev.nvim/check.yml?branch=main&label=CI&logo=githubactions&logoColor=white
 [lazy]: https://github.com/folke/lazy.nvim
 [lua]: https://www.lua.org/
 [lua-badge]:
