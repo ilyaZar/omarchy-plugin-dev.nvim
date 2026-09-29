@@ -180,13 +180,13 @@ end
 
 function M.check(root)
   local spec = {
-    name = "Omarchy Plugin: check",
+    name = "Check plugin",
     cwd = root,
     strategy = { "orchestrator", tasks = check_steps(root) },
     components = { "default" },
     metadata = metadata(root, "check"),
   }
-  return finalize(apply_override("check", root, spec), root, "check", "Omarchy Plugin: check")
+  return finalize(apply_override("check", root, spec), root, "check", "Check plugin")
 end
 
 function M.test(root)
@@ -198,27 +198,26 @@ function M.test(root)
   if not definition then
     local override = apply_override("test", root, nil)
     if override then
-      return finalize(override, root, "test", "Omarchy Plugin: test")
+      return finalize(override, root, "test", "Test plugin")
     end
     return nil, nil, "missing"
   end
+  local command = { script_path("run-project-test") }
+  vim.list_extend(command, vim.deepcopy(definition.command))
   local spec = {
-    name = "Omarchy Plugin: test",
-    cmd = vim.deepcopy(definition.command),
+    name = "Test plugin",
+    cmd = command,
     cwd = root,
     components = { "default" },
     metadata = metadata(root, "test"),
   }
-  if definition.description then
-    spec.name = "Omarchy Plugin: " .. definition.description
-  end
-  return finalize(apply_override("test", root, spec), root, "test", "Omarchy Plugin: test")
+  return finalize(apply_override("test", root, spec), root, "test", "Test plugin")
 end
 
 local function deploy(root)
   local executables = config.get().executables
   return finalize({
-    name = "Deploy Omarchy plugin",
+    name = "Deploy plugin",
     cmd = deploy_command(root),
     cwd = root,
     env = {
@@ -227,20 +226,20 @@ local function deploy(root)
       OMARCHY_PLUGIN_DEV_RSYNC = executables.rsync,
     },
     components = { "default" },
-  }, root, "deploy", "Deploy Omarchy plugin")
+  }, root, "deploy", "Deploy plugin")
 end
 
 local function restart(root)
   local executable = config.get().executables.omarchy
   return finalize({
-    name = "Restart Omarchy shell once",
+    name = "Restart Omarchy shell",
     cmd = { script_path("restart-shell") },
     cwd = root,
     env = {
       OMARCHY_PLUGIN_DEV_OMARCHY = executable,
     },
     components = { "default" },
-  }, root, "restart", "Restart Omarchy shell once")
+  }, root, "restart", "Restart Omarchy shell")
 end
 
 function M.hot_reload(root)

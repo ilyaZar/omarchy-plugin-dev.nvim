@@ -542,8 +542,8 @@ config.setup()
 
 local test_spec = assert(task_specs.test(project.canonical(root)))
 assert(
-  vim.deep_equal(test_spec.cmd, { vim.fs.joinpath(project.canonical(root), "scripts", "test") }),
-  "relative test executable was not anchored to the project root"
+  test_spec.cmd[1]:match("/scripts/run%-project%-test$") and test_spec.cmd[2] == "./scripts/test",
+  "project test task does not use its output wrapper"
 )
 assert(test_spec.cwd == project.canonical(root), "test task cwd is wrong")
 assert(

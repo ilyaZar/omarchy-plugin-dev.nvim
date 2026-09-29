@@ -74,6 +74,13 @@ local function build_tools(root)
     and require_executable(executables.rsync, root, "Deployment")
 end
 
+local function test_executable(spec)
+  if spec.cmd and spec.cmd[1] and spec.cmd[1]:match("/scripts/run%-project%-test$") then
+    return spec.cmd[2]
+  end
+  return spec.cmd and spec.cmd[1] or nil
+end
+
 local function show_spec_error(spec_error)
   if spec_error then
     messages.show(spec_error, vim.log.levels.ERROR)
@@ -101,7 +108,8 @@ function M.test(root)
     end
     return nil
   end
-  if spec.cmd and not require_executable(spec.cmd[1], root, "Test") then
+  local command = test_executable(spec)
+  if command and not require_executable(command, root, "Test") then
     return nil
   end
   return start(spec)
@@ -124,7 +132,8 @@ function M.build(root)
     if not build_tools(root) then
       return nil
     end
-    if test_spec.cmd and not require_executable(test_spec.cmd[1], root, "Test") then
+    local command = test_executable(test_spec)
+    if command and not require_executable(command, root, "Test") then
       return nil
     end
   end
