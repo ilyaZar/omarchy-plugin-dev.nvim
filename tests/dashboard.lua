@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local config = require("omarchy-plugin-dev.config")
 local project = require("omarchy-plugin-dev.project")
 local ui = require("omarchy-plugin-dev.ui")
@@ -283,4 +284,5 @@ project.external_validate_async = saved_validate
 project.test_state = saved_test_state
 lsp.status = saved_lsp_status
 package.loaded["omarchy-plugin-dev.actions"] = saved_actions
+---@diagnostic disable-next-line: param-type-mismatch
 config.setup(saved_config)

@@ -6,6 +6,10 @@ cleanup() {
   rm -rf -- "$test_root"
 }
 trap cleanup EXIT
+mock_validator="$test_root/validator"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$mock_validator"
+chmod +x "$mock_validator"
+export OMARCHY_PLUGIN_DEV_OMARCHY="$mock_validator"
 
 project="$test_root/project"
 plugins="$test_root/plugins"

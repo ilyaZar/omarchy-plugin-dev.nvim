@@ -38,7 +38,7 @@ function M.check()
 
   local lint_state, lint_detail, lint_info = require("omarchy-plugin-dev.qmllint").status()
   if lint_state == "missing" then
-    vim.health.error(lint_detail)
+    vim.health.error(lint_detail or "qmllint is unavailable")
   elseif lint_info and lint_info.major and lint_info.major < 6 then
     vim.health.warn("qmllint is available at " .. lint_detail)
   else

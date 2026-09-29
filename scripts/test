@@ -2,6 +2,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+test_home=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/omarchy-plugin-dev-nvim-test.XXXXXX")
+trap 'rm -rf -- "$test_home"' EXIT
+export XDG_CONFIG_HOME="$test_home/config"
+export XDG_DATA_HOME="$test_home/data"
+export XDG_CACHE_HOME="$test_home/cache"
+export XDG_STATE_HOME="$test_home/state"
 "${NVIM:-nvim}" --clean --headless -u tests/init.lua \
   -c "lua dofile('tests/runner.lua')"
 ./tests/deploy.sh

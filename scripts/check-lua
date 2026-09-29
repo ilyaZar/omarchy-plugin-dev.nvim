@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+check_root=$(mktemp -d)
+trap 'rm -rf -- "$check_root"' EXIT
+
+nvim_bin=${NVIM:-nvim}
+luals_bin=${LUALS:-lua-language-server}
+runtime=$("$nvim_bin" --clean --headless -u NONE \
+  -c 'lua io.write(vim.env.VIMRUNTIME)' -c 'qa!')
+[[ -d $runtime/lua ]] || {
+  printf 'Neovim Lua runtime not found: %s\n' "$runtime" >&2
+  exit 1
+}
+
+VIMRUNTIME="$runtime" "$luals_bin" --check=. --checklevel=Warning \
+  --check_format=pretty --logpath="$check_root/log" --metapath="$check_root/meta"

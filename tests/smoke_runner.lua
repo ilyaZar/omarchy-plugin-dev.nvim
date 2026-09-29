@@ -3,7 +3,7 @@ local ok, result = xpcall(function()
 end, debug.traceback)
 
 if not ok then
-  vim.api.nvim_err_writeln(result)
+  io.stderr:write(tostring(result) .. "\n")
   vim.cmd("cquit 1")
 else
   vim.cmd("qa!")

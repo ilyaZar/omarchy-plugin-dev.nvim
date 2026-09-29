@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local project = require("omarchy-plugin-dev.project")
 local actions = require("omarchy-plugin-dev.actions")
 local messages = require("omarchy-plugin-dev.messages")

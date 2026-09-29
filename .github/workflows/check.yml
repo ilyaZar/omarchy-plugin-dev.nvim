@@ -1,0 +1,57 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        nvim: ["0.11.7", "0.12.5"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl git jq qml6-module-qtquick qml6-module-qtqml-workerscript \
+            qt6-base-dev-tools qt6-declarative-dev-tools qt6-qmllint-plugins \
+            qt6-qmltooling-plugins ripgrep rsync unzip
+
+      - name: Install Neovim
+        run: |
+          curl -fsSL \
+            "https://github.com/neovim/neovim/releases/download/v${{ matrix.nvim }}/nvim-linux-x86_64.tar.gz" \
+            -o "$RUNNER_TEMP/nvim.tar.gz"
+          tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$RUNNER_TEMP"
+          echo "NVIM=$RUNNER_TEMP/nvim-linux-x86_64/bin/nvim" >> "$GITHUB_ENV"
+
+      - name: Install Lua tools
+        run: |
+          curl -fsSL \
+            https://github.com/JohnnyMorganz/StyLua/releases/download/v2.5.2/stylua-linux-x86_64.zip \
+            -o "$RUNNER_TEMP/stylua.zip"
+          mkdir -p "$RUNNER_TEMP/stylua" "$RUNNER_TEMP/luals"
+          unzip -q "$RUNNER_TEMP/stylua.zip" -d "$RUNNER_TEMP/stylua"
+          curl -fsSL \
+            https://github.com/LuaLS/lua-language-server/releases/download/3.18.2/lua-language-server-3.18.2-linux-x64.tar.gz \
+            -o "$RUNNER_TEMP/luals.tar.gz"
+          tar -xzf "$RUNNER_TEMP/luals.tar.gz" -C "$RUNNER_TEMP/luals"
+          echo "LUALS=$RUNNER_TEMP/luals/bin/lua-language-server" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
+
+      - name: Test
+        run: ./scripts/test
+
+      - name: Check formatting
+        run: stylua --check ftdetect lua plugin tests
+
+      - name: Check Lua types
+        run: ./scripts/check-lua

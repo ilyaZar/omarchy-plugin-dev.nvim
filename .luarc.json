@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime.version": "LuaJIT",
   "workspace.library": [
-    "$VIMRUNTIME/lua"
+    "${env:VIMRUNTIME}/lua",
+    "${3rd}/luv/library"
   ],
   "diagnostics.globals": [
     "vim"

@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local config = require("omarchy-plugin-dev.config")
 local actions = require("omarchy-plugin-dev.actions")
 local messages = require("omarchy-plugin-dev.messages")
@@ -9,6 +10,7 @@ local root = vim.fn.tempname()
 vim.fn.mkdir(root .. "/doc", "p")
 
 for _, value in ipairs({ false, 12, {}, "" }) do
+  ---@diagnostic disable-next-line: assign-type-mismatch
   local ok, err = pcall(config.setup, { config_file = value })
   assert(not ok and tostring(err):find("config_file", 1, true), "invalid config_file was accepted")
 end
@@ -60,5 +62,6 @@ vim.api.nvim_buf_delete(help_buf, {})
 
 messages.show = saved_show
 vim.o.runtimepath = saved_rtp
+---@diagnostic disable-next-line: param-type-mismatch
 config.setup(saved_config)
 assert(vim.fn.delete(root, "rf") == 0, "configuration fixture was not removed")

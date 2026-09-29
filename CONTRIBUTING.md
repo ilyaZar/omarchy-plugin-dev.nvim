@@ -2,6 +2,7 @@
 
 Run `./scripts/test` for automated checks and
 `stylua --check ftdetect lua plugin tests` for Lua formatting.
+Run `./scripts/check-lua` with LuaLS on PATH for type diagnostics.
 
 The smoke test requires an existing Omarchy plugin project and validates and
 opens every entry point declared by its manifest:

@@ -5,7 +5,7 @@ end, function(error)
 end)
 
 if not ok then
-  vim.api.nvim_err_writeln(tostring(result))
+  io.stderr:write(tostring(result) .. "\n")
   vim.cmd("cquit 1")
 else
   vim.cmd("qa!")
