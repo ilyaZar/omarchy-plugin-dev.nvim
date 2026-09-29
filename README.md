@@ -125,7 +125,8 @@ opts = {
 
 Plugin QML uses four-space indentation and formats on save through `qmlls`.
 QML JavaScript (`qmljs`) keeps language support and diagnostics, but skips
-format-on-save, including the editor-wide fallback, to avoid qmlls timeouts.
+the plugin's format-on-save hook to avoid qmlls timeouts. It sets
+`b:autoformat=false` for other save hooks that honor that convention.
 Inline diagnostic text is off by default; signs, underlines, and diagnostic
 pickers remain available. Set `diagnostics = false` to use Neovim's global
 settings.
