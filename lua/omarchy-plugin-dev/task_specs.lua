@@ -160,7 +160,9 @@ local function check_steps(root)
     local lint_executable = require("omarchy-plugin-dev.qmllint").executable()
       or values.executables.qmllint
     local lint_command = { script_path("lint-qml") }
-    for _, import_path in ipairs(require("omarchy-plugin-dev.qml").import_paths()) do
+    local import_paths, import_error = require("omarchy-plugin-dev.qml").import_paths()
+    assert(not import_error, import_error)
+    for _, import_path in ipairs(import_paths) do
       vim.list_extend(lint_command, { "-I", import_path })
     end
     vim.list_extend(lint_command, files)

@@ -64,6 +64,11 @@ local function check_tools(root)
     messages.show("QML lint is unavailable (" .. lint_error .. ")", vim.log.levels.ERROR)
     return false
   end
+  local _, import_error = require("omarchy-plugin-dev.qml").import_paths()
+  if import_error then
+    messages.show(import_error, vim.log.levels.ERROR)
+    return false
+  end
   return true
 end
 

@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local config = require("omarchy-plugin-dev.config")
 local project = require("omarchy-plugin-dev.project")
 local task_specs = require("omarchy-plugin-dev.task_specs")
@@ -289,6 +290,7 @@ assert(async_validation_result == false, "failed official validation was reporte
 assert(async_validation_error == "validation failed", "official validation failure was unclear")
 assert(config.setup().format_on_save, "QML format-on-save is not enabled by default")
 local active_config = config.get()
+---@diagnostic disable-next-line: assign-type-mismatch
 local valid_format_option, format_option_error = pcall(config.setup, { format_on_save = "yes" })
 assert(not valid_format_option, "invalid format_on_save configuration was accepted")
 assert(
@@ -309,6 +311,7 @@ for _, invalid in ipairs({
   )
   assert(config.get() == active_config, "rejected nested option replaced active configuration")
 end
+---@diagnostic disable-next-line: assign-type-mismatch
 local valid_filter_option, filter_option_error = pcall(config.setup, { qml_file_filter = true })
 assert(not valid_filter_option, "invalid qml_file_filter configuration was accepted")
 assert(
@@ -317,6 +320,7 @@ assert(
 )
 config.setup({
   qml_file_filter = function()
+    ---@diagnostic disable-next-line: return-type-mismatch
     return "yes"
   end,
 })
@@ -361,6 +365,12 @@ write(vim.fs.joinpath(fake_shell_root, "Ui", "PluginBarApi.qml"), {
   "  function hideTooltip(target) {}",
   "}",
 })
+local base_config_setup = config.setup
+config.setup = function(opts)
+  return base_config_setup(
+    vim.tbl_extend("force", { qml_import_paths = { fake_shell_root } }, opts or {})
+  )
+end
 local qml_cache_root = vim.fs.joinpath(temp_root, "qml cache")
 config.setup({ qml_import_paths = { fake_shell_root } })
 local qml_import_paths, qml_import_error = require("omarchy-plugin-dev.qml").import_paths({
@@ -481,7 +491,41 @@ assert(
   "Qt's QML import path was not discovered"
 )
 vim.env.FAKE_QT_QML = nil
+local qt_bin = vim.fs.joinpath(temp_root, "qt bin")
+local qt_probe_count = vim.fs.joinpath(temp_root, "qt probes")
+local fake_qtpaths = vim.fs.joinpath(qt_bin, "qtpaths6")
+write(fake_qtpaths, {
+  "#!/bin/sh",
+  'printf "probe\\n" >> "$QT_PROBE_COUNT"',
+  'printf "%s\\n" "$FAKE_QT_QML"',
+})
+make_executable(fake_qtpaths)
+local old_path = vim.env.PATH
+vim.env.PATH = qt_bin .. ":" .. old_path
+vim.env.QT_PROBE_COUNT = qt_probe_count
+vim.env.FAKE_QT_QML = fake_qt_qml
+local qml = require("omarchy-plugin-dev.qml")
+config.setup({ qml_import_paths = { vim.fs.joinpath(temp_root, "missing imports") } })
+local _, missing_directory_error = qml.import_paths({ qt_qml_queries = {} })
+assert(
+  missing_directory_error and missing_directory_error:find("directory is missing", 1, true),
+  "missing configured imports were silent"
+)
+config.setup({ qml_import_paths = { fake_shell_root } })
+local first_qt_paths = qml.import_paths({ cache_root = qml_cache_root })
+local second_qt_paths = qml.import_paths({ cache_root = qml_cache_root })
+assert(first_qt_paths[1] == fake_qt_qml and second_qt_paths[1] == fake_qt_qml)
+assert(#vim.fn.readfile(qt_probe_count) == 1, "Qt discovery ran twice")
+vim.env.PATH = old_path
+vim.env.QT_PROBE_COUNT = nil
+vim.env.FAKE_QT_QML = nil
+local slow_qt = vim.fs.joinpath(temp_root, "slow Qt query")
+write(slow_qt, { "#!/bin/sh", "sleep 1" })
+make_executable(slow_qt)
+local _, slow_qt_error = qml.import_paths({ qt_qml_queries = { { slow_qt } } })
+assert(slow_qt_error and slow_qt_error:find("timed out", 1, true), "slow Qt probe was silent")
 config.setup({
+  qml_import_paths = { fake_shell_root },
   qml_file_filter = function(context)
     return context.path ~= project.canonical(excluded_qml_path)
   end,
@@ -534,12 +578,12 @@ for index, argument in ipairs(lint_step.cmd) do
     lint_import_paths[#lint_import_paths + 1] = lint_step.cmd[index + 1]
   end
 end
-assert(vim.tbl_contains(lint_import_paths, "/usr/share/omarchy/shell"), "lint lost Omarchy imports")
+assert(vim.tbl_contains(lint_import_paths, fake_shell_root), "lint lost configured imports")
 local has_qs_bridge = false
 for _, import_path in ipairs(lint_import_paths) do
   if
     vim.uv.fs_realpath(vim.fs.joinpath(import_path, "qs", "shell.qml"))
-    == vim.uv.fs_realpath("/usr/share/omarchy/shell/shell.qml")
+    == vim.uv.fs_realpath(vim.fs.joinpath(fake_shell_root, "shell.qml"))
   then
     has_qs_bridge = true
   end
@@ -694,6 +738,31 @@ if vim.fn.executable("/usr/lib/qt6/bin/qmlls") == 1 then
     "automatic QML server resolution did not prefer the system Qt server"
   )
 end
+local saved_import_paths = qml.import_paths
+local saved_show = require("omarchy-plugin-dev.messages").show
+local saved_notify_once = vim.notify_once
+local import_notice
+qml.import_paths = function()
+  return {}, "Qt imports unavailable"
+end
+require("omarchy-plugin-dev.messages").show = function(message)
+  import_notice = message
+end
+rawset(vim, "notify_once", function(message)
+  import_notice = message
+end)
+local missing_import_setup, missing_import_error = lsp.setup()
+assert(not missing_import_setup and missing_import_error == "Qt imports unavailable")
+local spec_ok, spec_error = pcall(task_specs.check, project.canonical(root))
+assert(not spec_ok and tostring(spec_error):find("Qt imports unavailable", 1, true))
+config.setup({ executables = { omarchy = "/bin/true" } })
+assert(tasks.check(project.canonical(root)) == nil, "check started with incomplete imports")
+assert(import_notice == "Qt imports unavailable", "missing imports were not reported")
+qml.import_paths = saved_import_paths
+require("omarchy-plugin-dev.messages").show = saved_show
+rawset(vim, "notify_once", saved_notify_once)
+config.setup()
+assert(lsp.setup(), "LSP did not recover after import discovery succeeded")
 
 local original_notify = vim.notify
 local notifications = {}
@@ -1243,6 +1312,7 @@ assert(vim.bo.filetype == "checkhealth", "health report did not open")
 vim.cmd.close()
 
 package.loaded.overseer = original_overseer
+config.setup = base_config_setup
 dofile("tests/dashboard.lua")
 dofile("tests/manifest_inspection.lua")
 dofile("tests/configuration.lua")

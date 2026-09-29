@@ -7,6 +7,7 @@ local qt_qml_queries = {
   { "qmake-qt6", "-query", "QT_INSTALL_QML" },
   { "qtpaths", "--qt-version", "6", "--query", "QT_INSTALL_QML" },
 }
+local cached_qt_discovery
 
 local function add_unique(paths, seen, path)
   path = vim.fs.normalize(path)
@@ -23,18 +24,55 @@ local function entries(path)
 end
 
 local function qt_qml_import_path(queries)
+  local use_cache = queries == nil
+  if use_cache and cached_qt_discovery then
+    if not cached_qt_discovery.path or vim.fn.isdirectory(cached_qt_discovery.path) == 1 then
+      return cached_qt_discovery.path, cached_qt_discovery.error
+    end
+    cached_qt_discovery = nil
+  end
+  local failures = {}
   for _, query in ipairs(queries or qt_qml_queries) do
     local executable = vim.fn.exepath(query[1])
     if executable ~= "" then
       local command = vim.deepcopy(query)
       command[1] = executable
-      local result = vim.system(command, { text = true }):wait(2000)
-      local path = vim.trim(result.stdout or "")
-      if result.code == 0 and path ~= "" and vim.fn.isdirectory(path) == 1 then
-        return vim.fs.normalize(path)
+      local result = vim.system(command, { text = true, timeout = 500 }):wait(1000)
+      local path = result and vim.trim(result.stdout or "") or ""
+      if result and result.code == 0 and path ~= "" and vim.fn.isdirectory(path) == 1 then
+        local found = vim.fs.normalize(path)
+        if use_cache then
+          cached_qt_discovery = { path = found }
+        end
+        return found
       end
+      local failure
+      if not result or result.code == 124 then
+        failure = "timed out"
+      elseif result.code ~= 0 then
+        failure = "exited with code " .. result.code
+        local detail = vim.trim(result.stderr or "")
+        if detail ~= "" then
+          failure = failure .. ": " .. detail
+        end
+      elseif path == "" then
+        failure = "returned no QML directory"
+      else
+        failure = "returned missing QML directory " .. path
+      end
+      failures[#failures + 1] = query[1] .. " " .. failure
     end
   end
+  local failure
+  if #failures > 0 then
+    failure = "Qt QML import discovery: " .. table.concat(failures, ", ")
+  elseif use_cache then
+    failure = "Qt QML import discovery: no Qt 6 query tool is available"
+  end
+  if use_cache then
+    cached_qt_discovery = { error = failure }
+  end
+  return nil, failure
 end
 
 local function is_quickshell_root(path)
@@ -82,6 +120,7 @@ local function link(source, target)
   if not stat then
     return nil, "source path disappeared: " .. source
   end
+  ---@diagnostic disable-next-line: missing-fields
   return vim.uv.fs_symlink(source, target, { dir = stat.type == "directory" })
 end
 
@@ -212,12 +251,16 @@ function M.import_paths(opts)
   local paths = {}
   local seen = {}
   local errors = {}
-  local qt_path = qt_qml_import_path(opts.qt_qml_queries)
+  local qt_path, qt_error = qt_qml_import_path(opts.qt_qml_queries)
   if qt_path then
     add_unique(paths, seen, qt_path)
+  elseif qt_error then
+    errors[#errors + 1] = qt_error
   end
   for _, configured in ipairs(require("omarchy-plugin-dev.config").get().qml_import_paths) do
-    if is_quickshell_root(configured) then
+    if vim.fn.isdirectory(configured) ~= 1 then
+      errors[#errors + 1] = "QML import directory is missing: " .. configured
+    elseif is_quickshell_root(configured) then
       local bridge, bridge_error = namespace_bridge(configured, opts.cache_root)
       if bridge then
         add_unique(paths, seen, bridge)

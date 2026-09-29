@@ -106,6 +106,14 @@ function M.setup()
   local executable = M.executable()
   local cmd = { executable or "qmlls", "--no-cmake-calls", "-E" }
   local import_paths, import_error = require("omarchy-plugin-dev.qml").import_paths()
+  if import_error then
+    if enabled then
+      vim.lsp.enable(M.name, false)
+      enabled = false
+    end
+    vim.notify_once(import_error, vim.log.levels.ERROR, { title = "Omarchy Plugin Dev" })
+    return false, import_error
+  end
   for _, import_path in ipairs(import_paths) do
     vim.list_extend(cmd, { "-I", import_path })
   end
@@ -137,10 +145,6 @@ function M.setup()
     end,
     desc = "Keep Omarchy Plugin buffers on their project-aware QML server",
   })
-
-  if import_error then
-    vim.notify_once(import_error, vim.log.levels.WARN, { title = "Omarchy Plugin Dev" })
-  end
 
   if executable then
     vim.lsp.enable(M.name)
