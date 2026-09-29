@@ -1151,6 +1151,31 @@ local check_task = assert(tasks.check(project.canonical(root)))
 assert(check_task.starts == 1, "check task did not start")
 assert(check_task.spec.cwd == project.canonical(root), "visible check task has the wrong root")
 assert(opened[#opened].focus_task_id == check_task.id, "check task was not shown in Overseer")
+config.setup({
+  tasks = {
+    test = { cmd = "printf test" },
+    hello = { cmd = "printf hello" },
+  },
+  executables = { qml_language_server = "definitely-missing-qml-language-server" },
+})
+assert(
+  tasks.test(project.canonical(root)).spec.cmd == "printf test",
+  "string test override did not start"
+)
+local original_select = vim.ui.select
+vim.ui.select = function(choices, _, callback)
+  for _, choice in ipairs(choices) do
+    if choice.label == "Project: hello" then
+      callback(choice)
+      return
+    end
+  end
+  error("custom task choice was missing")
+end
+tasks.picker(project.canonical(root))
+vim.ui.select = original_select
+assert(created_tasks[#created_tasks].spec.cmd == "printf hello", "string custom task did not start")
+config.setup({ executables = { qml_language_server = "definitely-missing-qml-language-server" } })
 
 vim.cmd.buffer(project_buf)
 vim.cmd.OmaDev()

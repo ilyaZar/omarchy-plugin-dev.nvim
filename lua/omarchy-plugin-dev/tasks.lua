@@ -75,10 +75,13 @@ local function build_tools(root)
 end
 
 local function test_executable(spec)
-  if spec.cmd and spec.cmd[1] and spec.cmd[1]:match("/scripts/run%-project%-test$") then
+  if type(spec.cmd) ~= "table" then
+    return nil
+  end
+  if spec.cmd[1] and spec.cmd[1]:match("/scripts/run%-project%-test$") then
     return spec.cmd[2]
   end
-  return spec.cmd and spec.cmd[1] or nil
+  return spec.cmd[1]
 end
 
 local function show_spec_error(spec_error)
@@ -154,7 +157,11 @@ local function run_custom(root, name)
     show_spec_error(spec_error)
     return nil
   end
-  if spec.cmd and not require_executable(spec.cmd[1], root, "Project task") then
+  if
+    type(spec.cmd) == "table"
+    and spec.cmd[1]
+    and not require_executable(spec.cmd[1], root, "Project task")
+  then
     return nil
   end
   return start(spec)
