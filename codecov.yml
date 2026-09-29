@@ -1,0 +1,18 @@
+comment: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        flags: [lua]
+    patch:
+      default: off
+
+flags:
+  lua:
+    paths:
+      - lua/
+      - plugin/
+      - ftdetect/
