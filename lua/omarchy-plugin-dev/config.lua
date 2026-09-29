@@ -16,6 +16,7 @@ local M = {}
 ---@field menu string|false
 
 ---@class OmarchyPluginDevOptions
+---@field config_file? string
 ---@field diagnostics? false|table
 ---@field enable_auto? boolean
 ---@field enable_first_install? boolean
@@ -36,6 +37,7 @@ local M = {}
 ---@field root string
 
 ---@class OmarchyPluginDevConfig
+---@field config_file? string
 ---@field diagnostics false|table
 ---@field enable_auto boolean
 ---@field enable_first_install boolean
@@ -86,6 +88,9 @@ local defaults = {
 local values = vim.deepcopy(defaults)
 
 local function validate(opts)
+  if opts.config_file ~= nil and (type(opts.config_file) ~= "string" or opts.config_file == "") then
+    error("omarchy-plugin-dev.nvim: config_file must be a non-empty path")
+  end
   if opts.diagnostics ~= false and type(opts.diagnostics) ~= "table" then
     error("omarchy-plugin-dev.nvim: diagnostics must be a table or false")
   end
@@ -136,6 +141,17 @@ end
 ---@return OmarchyPluginDevConfig
 function M.get()
   return values
+end
+
+function M.user_config_path()
+  if not values.config_file then
+    return nil
+  end
+  local path = vim.fs.normalize(values.config_file)
+  if path:sub(1, 1) ~= "/" then
+    path = vim.fs.joinpath(vim.fn.stdpath("config"), path)
+  end
+  return path
 end
 
 return M

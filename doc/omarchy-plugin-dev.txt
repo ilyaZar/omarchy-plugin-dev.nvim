@@ -142,6 +142,17 @@ false to disable defaults. Executable names, QML import paths, notifications,
 and Overseer task definitions are configurable. Setup and commands remain
 available without mappings.
 
+In the dashboard, c or Enter on Plugin settings opens configuration help.
+Set config_file to open your Lua settings file instead: >lua
+  opts = {
+    config_file = "lua/plugins/omarchy-plugin-dev.lua",
+  }
+<
+Use your actual filename. Relative paths use stdpath("config"), including
+custom Neovim config locations; absolute paths are also accepted. The file
+must already exist. Opening it does not execute it or change any settings.
+Restart Neovim after changing mappings.
+
 For a repository containing more than one QML target, qml_file_filter may be
 a function that decides whether a file belongs to the detected Omarchy plugin.
 It receives a table containing path, relative_path, root, and a copy of the

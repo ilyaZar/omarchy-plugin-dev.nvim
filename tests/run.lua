@@ -1016,25 +1016,25 @@ vim.cmd.buffer(project_buf)
 vim.cmd.OmaDev()
 assert(vim.bo.filetype == "omarchy-plugin-dev", "dashboard did not open")
 local dashboard_buf = vim.api.nvim_get_current_buf()
-local dashboard_lines = vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false)
+local function dashboard_text()
+  return table.concat(vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false), "\n"):gsub(" +", " ")
+end
 assert(
-  dashboard_lines[3]:find("manifest: recognized", 1, true),
+  dashboard_text():find("manifest: recognized", 1, true),
   "dashboard overstates lightweight manifest recognition"
 )
 assert(
   vim.wait(5000, function()
-    local line = vim.api.nvim_buf_get_lines(dashboard_buf, 3, 4, false)[1] or ""
-    return line:find("official validation: passed", 1, true) ~= nil
+    return dashboard_text():find("official validation: passed", 1, true) ~= nil
   end),
   "dashboard did not report official Omarchy validation"
 )
-dashboard_lines = vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false)
 assert(
-  table.concat(dashboard_lines, "\n"):find(lint_info.path, 1, true),
+  dashboard_text():find(lint_info.path, 1, true),
   "dashboard does not show the resolved qmllint path"
 )
 assert(
-  table.concat(dashboard_lines, "\n"):find("test task: configured", 1, true),
+  dashboard_text():find("test task: configured", 1, true),
   "dashboard does not show the configured test state"
 )
 vim.cmd.close()
@@ -1044,6 +1044,8 @@ assert(vim.bo.filetype == "checkhealth", "health report did not open")
 vim.cmd.close()
 
 package.loaded.overseer = original_overseer
+dofile("tests/dashboard.lua")
+dofile("tests/configuration.lua")
 assert(vim.fn.delete(temp_root, "rf") == 0, "temporary test tree was not removed")
 
 print("omarchy-plugin-dev.nvim tests passed")

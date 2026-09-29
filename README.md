@@ -131,6 +131,11 @@ settings.
 Change shortcuts in `opts.mappings`; set an entry or `mappings` to `false`
 to disable it.
 
+In `:OmaDev`, press `c` for plugin settings. To open your Lua config instead
+of help, add `config_file = "lua/plugins/omarchy-plugin-dev.lua"` to `opts`.
+Use your file's path, relative to Neovim's config directory or absolute.
+Restart Neovim after changing keys.
+
 For mixed repositories, `qml_file_filter` selects which files receive plugin
 integration. See [the help file][help] or `:help omarchy-plugin-dev` for its
 callback, executable and import-path settings, and task overrides.

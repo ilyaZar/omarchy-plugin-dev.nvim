@@ -43,6 +43,22 @@ function M.health()
   vim.cmd("checkhealth omarchy-plugin-dev")
 end
 
+function M.edit_config()
+  local path = require("omarchy-plugin-dev.config").user_config_path()
+  if not path then
+    vim.cmd.help("omarchy-plugin-dev-configuration")
+    return
+  end
+  if vim.fn.filereadable(path) ~= 1 then
+    require("omarchy-plugin-dev.messages").show(
+      "Config file not found: " .. path,
+      vim.log.levels.WARN
+    )
+    return
+  end
+  vim.cmd.edit(vim.fn.fnameescape(path))
+end
+
 function M.edit_tasks(bufnr)
   local info = current(bufnr)
   if not info then
