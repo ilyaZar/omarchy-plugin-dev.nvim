@@ -387,16 +387,26 @@ function M.initialize(root, opts)
   if vim.fn.mkdir(directory, "p") == 0 and vim.fn.isdirectory(directory) ~= 1 then
     return nil, string.format("could not create directory: %s", directory)
   end
-  local data = {
-    version = 1,
-    tasks = vim.empty_dict(),
-  }
+  local lines
   if opts.test_command then
-    data.tasks.test = {
-      command = opts.test_command,
+    lines = {
+      "{",
+      '  "version": 1,',
+      '  "tasks": {',
+      '    "test": {',
+      '      "command": ' .. vim.json.encode(opts.test_command),
+      "    }",
+      "  }",
+      "}",
+    }
+  else
+    lines = {
+      "{",
+      '  "version": 1,',
+      '  "tasks": {}',
+      "}",
     }
   end
-  local lines = vim.split(vim.json.encode(data), "\n", { plain = true })
   local write_error = vim.fn.writefile(lines, path)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
