@@ -281,12 +281,27 @@ assert(
 assert(async_validation_result == false, "failed official validation was reported as successful")
 assert(async_validation_error == "validation failed", "official validation failure was unclear")
 assert(config.setup().format_on_save, "QML format-on-save is not enabled by default")
+local active_config = config.get()
 local valid_format_option, format_option_error = pcall(config.setup, { format_on_save = "yes" })
 assert(not valid_format_option, "invalid format_on_save configuration was accepted")
 assert(
   tostring(format_option_error):find("format_on_save must be a boolean", 1, true),
   "invalid format_on_save configuration produced an unclear error"
 )
+assert(config.get() == active_config, "rejected configuration replaced the active values")
+for _, invalid in ipairs({
+  { value = { logs = false }, field = "logs must be a table" },
+  { value = { logs = { follow = "yes" } }, field = "logs.follow" },
+  { value = { mappings = { hot_reload = true } }, field = "mappings.hot_reload" },
+  { value = { tasks = { custom = false } }, field = "tasks must map names" },
+}) do
+  local accepted, validation_error = pcall(config.setup, invalid.value)
+  assert(
+    not accepted and tostring(validation_error):find(invalid.field, 1, true),
+    "invalid nested option was accepted"
+  )
+  assert(config.get() == active_config, "rejected nested option replaced active configuration")
+end
 local valid_filter_option, filter_option_error = pcall(config.setup, { qml_file_filter = true })
 assert(not valid_filter_option, "invalid qml_file_filter configuration was accepted")
 assert(

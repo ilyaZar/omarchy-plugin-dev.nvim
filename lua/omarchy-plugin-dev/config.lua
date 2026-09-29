@@ -103,8 +103,34 @@ local function validate(opts)
   if type(opts.format_on_save) ~= "boolean" then
     error("omarchy-plugin-dev.nvim: format_on_save must be a boolean")
   end
+  if type(opts.logs) ~= "table" then
+    error("omarchy-plugin-dev.nvim: logs must be a table")
+  end
+  if type(opts.logs.follow) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: logs.follow must be a boolean")
+  end
+  if type(opts.logs.match) ~= "string" or opts.logs.match == "" then
+    error("omarchy-plugin-dev.nvim: logs.match must be a non-empty string")
+  end
   if opts.mappings ~= false and type(opts.mappings) ~= "table" then
     error("omarchy-plugin-dev.nvim: mappings must be a table or false")
+  end
+  if opts.mappings ~= false then
+    if type(opts.mappings.enabled) ~= "boolean" then
+      error("omarchy-plugin-dev.nvim: mappings.enabled must be a boolean")
+    end
+    for _, name in ipairs({ "hot_reload", "build", "test", "menu" }) do
+      local lhs = opts.mappings[name]
+      if lhs ~= false and (type(lhs) ~= "string" or lhs == "") then
+        error(string.format("omarchy-plugin-dev.nvim: mappings.%s must be a key or false", name))
+      end
+    end
+  end
+  if type(opts.notify) ~= "boolean" then
+    error("omarchy-plugin-dev.nvim: notify must be a boolean")
+  end
+  if type(opts.log_level) ~= "number" or opts.log_level % 1 ~= 0 then
+    error("omarchy-plugin-dev.nvim: log_level must be an integer")
   end
   if type(opts.executables) ~= "table" then
     error("omarchy-plugin-dev.nvim: executables must be a table")
@@ -128,13 +154,23 @@ local function validate(opts)
   if type(opts.tasks) ~= "table" then
     error("omarchy-plugin-dev.nvim: tasks must be a table")
   end
+  for name, task in pairs(opts.tasks) do
+    if
+      type(name) ~= "string"
+      or name == ""
+      or (type(task) ~= "table" and type(task) ~= "function")
+    then
+      error("omarchy-plugin-dev.nvim: tasks must map names to tables or functions")
+    end
+  end
 end
 
 ---@param opts? OmarchyPluginDevOptions
 ---@return OmarchyPluginDevConfig
 function M.setup(opts)
-  values = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
-  validate(values)
+  local candidate = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  validate(candidate)
+  values = candidate
   return values
 end
 
