@@ -366,10 +366,12 @@ write(vim.fs.joinpath(fake_shell_root, "Ui", "PluginBarApi.qml"), {
   "}",
 })
 local base_config_setup = config.setup
+assert(config.get().executables.omarchy == "omarchy", "default Omarchy command changed")
 config.setup = function(opts)
-  return base_config_setup(
-    vim.tbl_extend("force", { qml_import_paths = { fake_shell_root } }, opts or {})
-  )
+  return base_config_setup(vim.tbl_deep_extend("force", {
+    qml_import_paths = { fake_shell_root },
+    executables = { omarchy = "/bin/true" },
+  }, opts or {}))
 end
 local qml_cache_root = vim.fs.joinpath(temp_root, "qml cache")
 config.setup({ qml_import_paths = { fake_shell_root } })
@@ -539,7 +541,7 @@ assert(
   "validation task does not use the manifest wrapper"
 )
 assert(
-  validate_step.env.OMARCHY_PLUGIN_DEV_OMARCHY == "omarchy",
+  validate_step.env.OMARCHY_PLUGIN_DEV_OMARCHY == config.get().executables.omarchy,
   "validation wrapper did not receive the configured Omarchy executable"
 )
 assert(
@@ -689,7 +691,7 @@ assert(
   "build does not use the shell restart helper"
 )
 assert(
-  hot_reload_steps[3].env.OMARCHY_PLUGIN_DEV_OMARCHY == "omarchy",
+  hot_reload_steps[3].env.OMARCHY_PLUGIN_DEV_OMARCHY == config.get().executables.omarchy,
   "shell restart helper did not receive the configured Omarchy executable"
 )
 
