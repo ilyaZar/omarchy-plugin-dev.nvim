@@ -10,25 +10,16 @@ local javascript_clients = {
   vtsls = true,
 }
 
-local function owns_other_buffer(client, detached_bufnr)
-  for bufnr in pairs(client.attached_buffers) do
-    if bufnr ~= detached_bufnr then
-      return true
-    end
-  end
-  return false
-end
-
-local function stop_if_unused(client, detached_bufnr)
+local function stop_if_unused(client)
   vim.defer_fn(function()
-    if owns_other_buffer(client, detached_bufnr) then
+    if next(client.attached_buffers) then
       return
     end
     if not (type(client.is_stopped) == "function" and client:is_stopped()) then
       client:stop()
     end
     vim.defer_fn(function()
-      if not owns_other_buffer(client, detached_bufnr) and client.rpc and client.rpc.terminate then
+      if not next(client.attached_buffers) and client.rpc and client.rpc.terminate then
         pcall(client.rpc.terminate)
       end
     end, 1000)
@@ -39,7 +30,7 @@ local function detach(client, bufnr)
   vim.lsp.buf_detach_client(bufnr, client.id)
   local namespace = vim.lsp.diagnostic.get_namespace(client.id)
   vim.diagnostic.reset(namespace, bufnr)
-  stop_if_unused(client, bufnr)
+  stop_if_unused(client)
 end
 
 local function candidates()

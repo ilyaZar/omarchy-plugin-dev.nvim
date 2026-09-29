@@ -786,7 +786,7 @@ local function run_deferred(delay)
   end
 end
 local function fake_client(id, name, attached_buffers)
-  return {
+  local client = {
     id = id,
     name = name,
     namespace = id + 54,
@@ -796,10 +796,15 @@ local function fake_client(id, name, attached_buffers)
         terminated_clients[#terminated_clients + 1] = id
       end,
     },
-    stop = function()
-      stopped_clients[#stopped_clients + 1] = id
-    end,
   }
+  function client:stop()
+    stopped_clients[#stopped_clients + 1] = id
+    self.stopped = true
+  end
+  function client:is_stopped()
+    return self.stopped == true
+  end
+  return client
 end
 local generic_qml_client = fake_client(17, "qmlls", {
   [project_buf] = true,
@@ -812,6 +817,9 @@ vim.lsp.get_clients = function(opts)
     return original_get_clients(opts)
   end
   local clients = { generic_qml_client, project_qml_client, javascript_client }
+  clients = vim.tbl_filter(function(client)
+    return client.attached_buffers[project_buf] ~= nil
+  end, clients)
   if opts.name then
     clients = vim.tbl_filter(function(client)
       return client.name == opts.name
@@ -822,6 +830,11 @@ end
 vim.lsp.buf_detach_client = function(bufnr, client_id)
   assert(bufnr == project_buf, "generic QML server was detached from the wrong buffer")
   detached_clients[#detached_clients + 1] = client_id
+  for _, client in ipairs({ generic_qml_client, project_qml_client, javascript_client }) do
+    if client.id == client_id then
+      client.attached_buffers[bufnr] = nil
+    end
+  end
 end
 vim.lsp.diagnostic.get_namespace = function(client_id)
   return client_id + 54
@@ -865,11 +878,21 @@ assert(lsp.release(project_buf), "excluded buffer did not release the project-aw
 assert(vim.deep_equal(detached_clients, { 18 }), "release detached the wrong language client")
 assert(vim.deep_equal(reset_namespaces, { 72 }), "release left project diagnostics behind")
 assert(#deferred_cleanups == 1, "released project client was not checked after detachment")
+project_qml_client.attached_buffers[project_buf] = true
 run_deferred(100)
 assert(
-  vim.deep_equal(stopped_clients, { 17, 18 }),
-  "released project client remained running without another buffer"
+  vim.deep_equal(stopped_clients, { 17 }),
+  "reattached project client was stopped by deferred cleanup"
 )
+assert(#deferred_cleanups == 0, "reattached client scheduled process cleanup")
+assert(lsp.release(project_buf), "reattached project client did not release")
+run_deferred(100)
+assert(vim.deep_equal(stopped_clients, { 17, 18 }), "unused project client remained running")
+project_qml_client.attached_buffers[project_buf] = true
+run_deferred(1000)
+assert(vim.deep_equal(terminated_clients, { 17 }), "reattached project client was terminated")
+assert(lsp.release(project_buf), "reattached stopped client did not release")
+run_deferred(100)
 run_deferred(1000)
 assert(
   vim.deep_equal(terminated_clients, { 17, 18 }),
