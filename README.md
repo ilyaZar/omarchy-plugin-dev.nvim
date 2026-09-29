@@ -152,6 +152,10 @@ stylua --check ftdetect lua plugin tests
 
 See [contributor notes](CONTRIBUTING.md) for smoke-test setup.
 
+## License
+
+[MIT](LICENSE) © 2026 IlyaZar.
+
 [lazy]: https://github.com/folke/lazy.nvim
 [lua]: https://www.lua.org/
 [lua-badge]:
