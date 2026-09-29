@@ -319,7 +319,7 @@ function M.dashboard(info, bufnr)
       { " move  ", "Comment" },
       { "[Tab]", "DiagnosticOk" },
       { " switch  ", "Comment" },
-      { "[q / Esc]", "DiagnosticOk" },
+      { "[q/Esc]", "DiagnosticOk" },
       { " close ", "Comment" },
     },
     footer_pos = "center",
