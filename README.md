@@ -1,6 +1,7 @@
 # omarchy-plugin-dev.nvim
 
 [![Neovim][neovim-badge]][neovim] [![Lua][lua-badge]][lua] [![CI][ci-badge]][ci]
+[![Lua coverage][coverage-badge]][coverage]
 
 A Neovim workflow for developing [Omarchy Quattro][omarchy] shell plugins
 written in QML.
@@ -13,13 +14,12 @@ written in QML.
 
 Supports QML and JavaScript libraries marked with `.pragma library` (`qmljs`).
 Editor integration attaches only inside detected Omarchy plugin projects.
-Opening a file never starts a build.
 
 ## Installation
 
 Requires Neovim 0.11+, Omarchy Quattro, [overseer.nvim][overseer], Qt 6
-`qmllint`, `jq`, and `rsync`. Language support and formatting also need
-`qmlls`; shell logs use `journalctl`.
+`qmllint`, `jq`, and `rsync`. Language support and formatting also need `qmlls`;
+shell logs use `journalctl`.
 
 Add this [lazy.nvim][lazy] spec to your Neovim plugin configuration:
 
@@ -58,7 +58,8 @@ Omarchy installs `qt6-declarative` by default through Quickshell. On other Arch
 Linux systems, `sudo pacman -S qt6-declarative` provides [qmlls][qmlls],
 [qmllint][qmllint], and `qmlformat`.
 
-The plugin uses an existing Overseer configuration and does not replace it.
+The plugin uses an existing Overseer configuration, if you've set up one
+already.
 
 ## Usage
 
@@ -68,15 +69,15 @@ and restart the shell. No task configuration is needed for this workflow.
 To configure tests, run `:OmaDevInit`. It validates the project and creates
 `.omarchy-plugin-dev/task-config.json`, adding its directory to `.gitignore`.
 Choose an executable `./scripts/test` or `./tests/all.sh` when offered;
-otherwise, initialization opens an empty task configuration for you to edit.
-See the [task configuration example][help] or
+otherwise, initialization opens an empty task configuration for you to edit. See
+the [task configuration example][help] or
 `:help omarchy-plugin-dev-initialization`.
 
 Legacy `tasks.json` files remain readable; see the initialization help for
 replacement with `:OmaDevInit!`.
 
-Open `:OmaDev` for project and tool status. Press `p` for built-in tasks,
-custom tasks, or **Shell logs**. Run `:OmaDevHealth` to diagnose missing tools.
+Open `:OmaDev` for project and tool status. Press `p` for built-in tasks, custom
+tasks, or **Shell logs**. Run `:OmaDevHealth` to diagnose missing tools.
 
 ## Commands and mappings
 
@@ -95,21 +96,24 @@ plugin never changes `vim.g.maplocalleader`.
 
 ## Build behavior
 
-Checks validate the manifest and lint QML. The default build also requires
-a configured test. Failed checks or tests stop deployment. Successful builds
-restart the shell once.
+Checks validate the manifest and lint QML. The default build runs configured
+tests. Without a test configuration, it shows a warning and continues,
+distinguishing detected tests from no tests found. Use `:OmaDevInit` to
+configure a runner; detected scripts are never run automatically. Failed checks,
+failed tests, or a missing configured test executable stop deployment.
+Successful builds restart the shell once.
 
 - Working directly in the installed plugin, or through a symlink to your
   project, requires no copying.
-- Otherwise, deployment copies your plugin files into the installation.
-  Files removed from your project or excluded from deployment are also
-  removed from the installed copy.
+- Otherwise, deployment copies your plugin files into the installation. Files
+  removed from your project or excluded from deployment are also removed from
+  the installed copy.
 - Deployment refuses to overwrite a separate Git checkout or a symlink to
   another project.
 
-Deployment enables the plugin by default. Set `enable_auto = false` to enable
-it only on first installation. Set `enable_first_install = false` as well
-to manage enabling yourself.
+Deployment enables the plugin by default. Set `enable_auto = false` to enable it
+only on first installation. Set `enable_first_install = false` as well to manage
+enabling yourself.
 
 ## Configuration
 
@@ -123,21 +127,20 @@ opts = {
 },
 ```
 
-Plugin QML uses four-space indentation and formats on save through `qmlls`.
-QML JavaScript (`qmljs`) keeps language support and diagnostics, but skips
-the plugin's format-on-save hook to avoid qmlls timeouts. It sets
-`b:autoformat=false` for other save hooks that honor that convention.
-Inline diagnostic text is off by default; signs, underlines, and diagnostic
-pickers remain available. Set `diagnostics = false` to use Neovim's global
-settings.
+Plugin QML uses four-space indentation and formats on save through `qmlls`. QML
+JavaScript (`qmljs`) keeps language support and diagnostics, but skips the
+plugin's format-on-save hook to avoid qmlls timeouts. It sets
+`b:autoformat=false` for other save hooks that honor that convention. Inline
+diagnostic text is off by default; signs, underlines, and diagnostic pickers
+remain available. Set `diagnostics = false` to use Neovim's global settings.
 
-Change shortcuts in `opts.mappings`; set an entry or `mappings` to `false`
-to disable it.
+Change shortcuts in `opts.mappings`; set an entry or `mappings` to `false` to
+disable it.
 
-In `:OmaDev`, press `c` for plugin settings. To open your Lua config instead
-of help, add `config_file = "lua/plugins/omarchy-plugin-dev.lua"` to `opts`.
-Use your file's path, relative to Neovim's config directory or absolute.
-Restart Neovim after changing keys.
+In `:OmaDev`, press `c` for plugin settings. To open your Lua config instead of
+help, add `config_file = "lua/plugins/omarchy-plugin-dev.lua"` to `opts`. Use
+your file's path, relative to Neovim's config directory or absolute. Restart
+Neovim after changing keys.
 
 For mixed repositories, `qml_file_filter` selects which files receive plugin
 integration. See [the help file][help] or `:help omarchy-plugin-dev` for its
@@ -157,7 +160,11 @@ See [contributor notes](CONTRIBUTING.md) for smoke-test setup.
 
 [MIT](LICENSE) © 2026 IlyaZar.
 
-[ci]: https://github.com/ilyaZar/omarchy-plugin-dev.nvim/actions/workflows/check.yml
+[coverage]: https://app.codecov.io/gh/ilyaZar/omarchy-plugin-dev.nvim
+[coverage-badge]:
+  https://img.shields.io/codecov/c/github/ilyaZar/omarchy-plugin-dev.nvim/main?flag=lua&style=flat-square&logo=codecov&logoColor=white&label=lua%20coverage&labelColor=2e3440&color=88c0d0
+[ci]:
+  https://github.com/ilyaZar/omarchy-plugin-dev.nvim/actions/workflows/check.yml
 [ci-badge]:
   https://img.shields.io/github/actions/workflow/status/ilyaZar/omarchy-plugin-dev.nvim/check.yml?branch=main&label=CI&logo=githubactions&logoColor=white
 [lazy]: https://github.com/folke/lazy.nvim
