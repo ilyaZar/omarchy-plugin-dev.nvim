@@ -1,7 +1,7 @@
 local M = {}
 
 function M.show(message, level)
-  local config = require("omarchy_plugin_dev.config").get()
+  local config = require("omarchy-plugin-dev.config").get()
   if config.notify == false then
     return
   end

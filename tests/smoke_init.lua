@@ -13,4 +13,4 @@ vim.opt.runtimepath:prepend(plugin_root)
 
 require("overseer").setup()
 vim.cmd.runtime("plugin/omarchy-plugin-dev.lua")
-require("omarchy_plugin_dev").setup()
+require("omarchy-plugin-dev").setup()

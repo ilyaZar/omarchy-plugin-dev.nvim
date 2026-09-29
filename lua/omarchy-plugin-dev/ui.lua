@@ -70,11 +70,11 @@ local function open_text(title, lines, opts)
 end
 
 function M.dashboard(info, bufnr)
-  local config = require("omarchy_plugin_dev.config").get()
-  local lsp_state, lsp_detail = require("omarchy_plugin_dev.lsp").status(bufnr)
-  local lint_state, lint_detail = require("omarchy_plugin_dev.qmllint").status()
+  local config = require("omarchy-plugin-dev.config").get()
+  local lsp_state, lsp_detail = require("omarchy-plugin-dev.lsp").status(bufnr)
+  local lint_state, lint_detail = require("omarchy-plugin-dev.qmllint").status()
   local overseer_available = pcall(require, "overseer")
-  local project = require("omarchy_plugin_dev.project")
+  local project = require("omarchy-plugin-dev.project")
   local tasks_data, tasks_error, tasks_exists = project.load_tasks(info.root)
   local test_state = project.test_state(info.root)
   local tasks_status = tasks_exists and (tasks_data and "valid" or "invalid") or "not initialized"
@@ -111,7 +111,7 @@ function M.dashboard(info, bufnr)
     "  q  Close",
   }
 
-  local actions = require("omarchy_plugin_dev.actions")
+  local actions = require("omarchy-plugin-dev.actions")
   local dashboard_buf, dashboard_window = open_text("Omarchy Plugin Dev", lines, {
     actions = {
       t = function()

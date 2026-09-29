@@ -1,8 +1,8 @@
 local M = {}
 
-local messages = require("omarchy_plugin_dev.messages")
-local project = require("omarchy_plugin_dev.project")
-local specs = require("omarchy_plugin_dev.task_specs")
+local messages = require("omarchy-plugin-dev.messages")
+local project = require("omarchy-plugin-dev.project")
+local specs = require("omarchy-plugin-dev.task_specs")
 
 local core_names = {
   check = true,
@@ -55,11 +55,11 @@ local function start(spec)
 end
 
 local function check_tools(root)
-  local executables = require("omarchy_plugin_dev.config").get().executables
+  local executables = require("omarchy-plugin-dev.config").get().executables
   if not require_executable(executables.omarchy, root, "Check") then
     return false
   end
-  local lint_info, lint_error = require("omarchy_plugin_dev.qmllint").resolve()
+  local lint_info, lint_error = require("omarchy-plugin-dev.qmllint").resolve()
   if not lint_info then
     messages.show("QML lint is unavailable (" .. lint_error .. ")", vim.log.levels.ERROR)
     return false
@@ -68,7 +68,7 @@ local function check_tools(root)
 end
 
 local function build_tools(root)
-  local executables = require("omarchy_plugin_dev.config").get().executables
+  local executables = require("omarchy-plugin-dev.config").get().executables
   return check_tools(root)
     and require_executable(executables.jq, root, "Deployment")
     and require_executable(executables.rsync, root, "Deployment")
@@ -157,7 +157,7 @@ local function project_task_names(root)
   if not data then
     return nil, load_error
   end
-  for name in pairs(require("omarchy_plugin_dev.config").get().tasks) do
+  for name in pairs(require("omarchy-plugin-dev.config").get().tasks) do
     if not core_names[name] then
       names[#names + 1] = name
       seen[name] = true

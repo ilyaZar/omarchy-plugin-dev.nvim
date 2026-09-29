@@ -24,7 +24,7 @@ for _, entry_point in ipairs(entry_points) do
   vim.cmd.edit(vim.fn.fnameescape(entry_path))
   assert(
     vim.wait(5000, function()
-      return package.loaded.omarchy_plugin_dev ~= nil
+      return package.loaded["omarchy-plugin-dev"] ~= nil
         and vim.b.omarchy_plugin_dev_root == canonical_root
     end),
     "local plugin did not attach for manifest entry point: " .. entry_point
@@ -84,7 +84,7 @@ assert(vim.bo.filetype == "checkhealth", "health command did not open")
 vim.cmd.close()
 vim.cmd.buffer(project_buf)
 
-require("omarchy_plugin_dev.tasks").check(canonical_root)
+require("omarchy-plugin-dev.tasks").check(canonical_root)
 local overseer = require("overseer")
 local check_task
 assert(
@@ -124,7 +124,7 @@ assert(
   "unrelated QML filetype missing"
 )
 local unrelated_buf = vim.api.nvim_get_current_buf()
-require("omarchy_plugin_dev").attach(unrelated_buf)
+require("omarchy-plugin-dev").attach(unrelated_buf)
 assert(vim.b.omarchy_plugin_dev_root == nil, "unrelated QML project was detected")
 assert(
   not mapping_by_desc(unrelated_buf, "Omarchy Plugin: check"),
@@ -157,7 +157,7 @@ assert(
   ),
   "initialization did not add the task directory to .gitignore"
 )
-local project = require("omarchy_plugin_dev.project")
+local project = require("omarchy-plugin-dev.project")
 local initialized_tasks = assert(project.load_tasks(init_root), "initialized tasks.json is invalid")
 local candidates = project.test_candidates(init_root)
 if #candidates > 0 then

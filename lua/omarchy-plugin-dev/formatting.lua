@@ -11,7 +11,7 @@ function M.format(bufnr)
   bufnr = bufnr or 0
   local clients = vim.lsp.get_clients({
     bufnr = bufnr,
-    name = require("omarchy_plugin_dev.lsp").name,
+    name = require("omarchy-plugin-dev.lsp").name,
   })
   if #clients == 0 then
     return false
@@ -52,7 +52,7 @@ function M.attach(bufnr)
   -- This plugin owns formatting for detected QML buffers so editor-wide hooks
   -- do not format the same buffer a second time.
   vim.b[bufnr].autoformat = false
-  if not require("omarchy_plugin_dev.config").get().format_on_save then
+  if not require("omarchy-plugin-dev.config").get().format_on_save then
     return true
   end
 

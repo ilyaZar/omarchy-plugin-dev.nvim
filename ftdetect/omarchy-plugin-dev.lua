@@ -1,1 +1,1 @@
-require("omarchy_plugin_dev.filetype").setup()
+require("omarchy-plugin-dev.filetype").setup()

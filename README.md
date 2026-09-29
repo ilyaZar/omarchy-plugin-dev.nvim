@@ -30,7 +30,7 @@ Using [lazy.nvim][lazy]:
 ```lua
 {
   "ilyaZar/omarchy-plugin-dev.nvim",
-  main = "omarchy_plugin_dev",
+  main = "omarchy-plugin-dev",
   ft = { "qml", "qmljs" },
   cmd = {
     "OmaDev",
@@ -121,7 +121,7 @@ Existing mappings are preserved. The plugin never changes
 The defaults work without configuration. For example:
 
 ```lua
-require("omarchy_plugin_dev").setup({
+require("omarchy-plugin-dev").setup({
   diagnostics = {
     virtual_text = false,
   },

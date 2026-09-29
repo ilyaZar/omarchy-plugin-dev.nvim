@@ -38,7 +38,7 @@ function M.attach(bufnr)
   if attached[bufnr] or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
-  local mappings = require("omarchy_plugin_dev.config").get().mappings
+  local mappings = require("omarchy-plugin-dev.config").get().mappings
   if mappings == false or mappings.enabled == false then
     attached[bufnr] = {}
     return
@@ -49,7 +49,7 @@ function M.attach(bufnr)
     local lhs = mappings[key]
     if lhs and lhs ~= false and (definition.force or not existing_mapping(bufnr, lhs)) then
       vim.keymap.set("n", lhs, function()
-        require("omarchy_plugin_dev.actions")[definition.method](bufnr)
+        require("omarchy-plugin-dev.actions")[definition.method](bufnr)
       end, {
         buffer = bufnr,
         desc = definition.desc,

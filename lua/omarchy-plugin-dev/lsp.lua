@@ -43,7 +43,7 @@ local function detach(client, bufnr)
 end
 
 local function candidates()
-  local configured = require("omarchy_plugin_dev.config").get().executables.qml_language_server
+  local configured = require("omarchy-plugin-dev.config").get().executables.qml_language_server
   if configured ~= "auto" then
     return { configured }
   end
@@ -72,7 +72,7 @@ function M.installation_message()
 end
 
 function M.root_dir(bufnr, on_dir)
-  local info = require("omarchy_plugin_dev.project").detect_file(bufnr)
+  local info = require("omarchy-plugin-dev.project").detect_file(bufnr)
   if info then
     on_dir(info.root)
   end
@@ -82,7 +82,7 @@ function M.claim(bufnr)
   if not M.available() then
     return false
   end
-  local info = require("omarchy_plugin_dev.project").detect_file(bufnr)
+  local info = require("omarchy-plugin-dev.project").detect_file(bufnr)
   if not info then
     return false
   end
@@ -114,7 +114,7 @@ function M.setup()
 
   local executable = M.executable()
   local cmd = { executable or "qmlls", "--no-cmake-calls", "-E" }
-  local import_paths, import_error = require("omarchy_plugin_dev.qml").import_paths()
+  local import_paths, import_error = require("omarchy-plugin-dev.qml").import_paths()
   for _, import_path in ipairs(import_paths) do
     vim.list_extend(cmd, { "-I", import_path })
   end
@@ -122,7 +122,7 @@ function M.setup()
     cmd = cmd,
     filetypes = { "qml", "qmljs" },
     on_attach = function(client)
-      local diagnostics = require("omarchy_plugin_dev.config").get().diagnostics
+      local diagnostics = require("omarchy-plugin-dev.config").get().diagnostics
       if diagnostics ~= false then
         local namespace = vim.lsp.diagnostic.get_namespace(client.id)
         vim.diagnostic.config(diagnostics, namespace)

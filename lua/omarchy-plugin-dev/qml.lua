@@ -216,7 +216,7 @@ function M.import_paths(opts)
   if qt_path then
     add_unique(paths, seen, qt_path)
   end
-  for _, configured in ipairs(require("omarchy_plugin_dev.config").get().qml_import_paths) do
+  for _, configured in ipairs(require("omarchy-plugin-dev.config").get().qml_import_paths) do
     if is_quickshell_root(configured) then
       local bridge, bridge_error = namespace_bridge(configured, opts.cache_root)
       if bridge then

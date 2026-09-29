@@ -101,7 +101,7 @@ Every mapping is buffer-local and has a human-readable description.
 CONFIGURATION                                  *omarchy-plugin-dev-configuration*
 
 Call setup through a plugin manager's opts or directly: >lua
-  require("omarchy_plugin_dev").setup({
+  require("omarchy-plugin-dev").setup({
     diagnostics = {
       virtual_text = false,
     },

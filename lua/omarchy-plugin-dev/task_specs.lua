@@ -1,7 +1,7 @@
 local M = {}
 
-local config = require("omarchy_plugin_dev.config")
-local project = require("omarchy_plugin_dev.project")
+local config = require("omarchy-plugin-dev.config")
+local project = require("omarchy-plugin-dev.project")
 
 local function metadata(root, action)
   return {
@@ -123,7 +123,7 @@ local function qml_files(root)
   local files = {}
   for _, path in ipairs(source_files(root)) do
     if
-      (path:match("%.qml$") or require("omarchy_plugin_dev.filetype").is_qml_javascript(path))
+      (path:match("%.qml$") or require("omarchy-plugin-dev.filetype").is_qml_javascript(path))
       and project.includes(path, info)
     then
       files[#files + 1] = path
@@ -145,10 +145,10 @@ local function check_steps(root)
   local steps = { validate }
   local files = qml_files(root)
   if #files > 0 then
-    local lint_executable = require("omarchy_plugin_dev.qmllint").executable()
+    local lint_executable = require("omarchy-plugin-dev.qmllint").executable()
       or values.executables.qmllint
     local lint_command = { lint_executable }
-    for _, import_path in ipairs(require("omarchy_plugin_dev.qml").import_paths()) do
+    for _, import_path in ipairs(require("omarchy-plugin-dev.qml").import_paths()) do
       vim.list_extend(lint_command, { "-I", import_path })
     end
     vim.list_extend(lint_command, files)

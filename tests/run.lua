@@ -1,7 +1,7 @@
-local config = require("omarchy_plugin_dev.config")
-local project = require("omarchy_plugin_dev.project")
-local task_specs = require("omarchy_plugin_dev.task_specs")
-local tasks = require("omarchy_plugin_dev.tasks")
+local config = require("omarchy-plugin-dev.config")
+local project = require("omarchy-plugin-dev.project")
+local task_specs = require("omarchy-plugin-dev.task_specs")
+local tasks = require("omarchy-plugin-dev.tasks")
 
 local temp_root = vim.fn.tempname()
 assert(vim.fn.mkdir(temp_root, "p") == 1, "temporary root was not created")
@@ -72,7 +72,7 @@ for _, name in ipairs({
   "edit_tasks",
   "init_project",
 }) do
-  assert(require("omarchy_plugin_dev")[name] == nil, name .. " remains in the top-level Lua API")
+  assert(require("omarchy-plugin-dev")[name] == nil, name .. " remains in the top-level Lua API")
 end
 
 local root = vim.fs.joinpath(temp_root, "plugin with spaces")
@@ -96,7 +96,7 @@ write(vim.fs.joinpath(root, ".gitignore"), { "/ignored/" })
 local git_init = vim.system({ "git", "-C", root, "init", "--quiet" }, { text = true }):wait()
 assert(git_init.code == 0, "temporary Git project was not initialized: " .. (git_init.stderr or ""))
 
-local filetype = require("omarchy_plugin_dev.filetype")
+local filetype = require("omarchy-plugin-dev.filetype")
 assert(
   vim.treesitter.language.get_lang("qmljs") == "javascript",
   "QML JavaScript was not mapped to the JavaScript parser"
@@ -312,7 +312,7 @@ write(vim.fs.joinpath(fake_shell_root, "Ui", "PluginBarApi.qml"), {
 })
 local qml_cache_root = vim.fs.joinpath(temp_root, "qml cache")
 config.setup({ qml_import_paths = { fake_shell_root } })
-local qml_import_paths, qml_import_error = require("omarchy_plugin_dev.qml").import_paths({
+local qml_import_paths, qml_import_error = require("omarchy-plugin-dev.qml").import_paths({
   cache_root = qml_cache_root,
   qt_qml_queries = {},
 })
@@ -352,7 +352,7 @@ write(valid_qml, {
   "import qs.Commons",
   "Item { property int rowHeight: Style.spacing.controlHeight }",
 })
-local qml_lint = assert(require("omarchy_plugin_dev.qmllint").resolve())
+local qml_lint = assert(require("omarchy-plugin-dev.qmllint").resolve())
 local valid_lint = vim
   .system({ qml_lint.path, "-I", qml_import_paths[1], valid_qml }, { text = true })
   :wait()
@@ -421,7 +421,7 @@ write(fake_qmake, {
 })
 make_executable(fake_qmake)
 vim.env.FAKE_QT_QML = fake_qt_qml
-local discovered_qml_paths = require("omarchy_plugin_dev.qml").import_paths({
+local discovered_qml_paths = require("omarchy-plugin-dev.qml").import_paths({
   cache_root = qml_cache_root,
   qt_qml_queries = { { fake_qmake, "-query", "QT_INSTALL_QML" } },
 })
@@ -449,7 +449,7 @@ assert(
   "validation argv is wrong"
 )
 local lint_step = check_spec.strategy.tasks[2]
-local lint_info = assert(require("omarchy_plugin_dev.qmllint").resolve())
+local lint_info = assert(require("omarchy-plugin-dev.qmllint").resolve())
 assert(lint_info.major >= 6, "automatic qmllint resolution selected a pre-Qt-6 executable")
 assert(lint_step.cmd[1] == lint_info.path, "lint task does not use the resolved Qt 6 qmllint")
 assert(lint_step.cmd[2] == "-I", "lint task lost the import flag")
@@ -583,7 +583,7 @@ assert(
 )
 
 config.setup()
-local lsp = require("omarchy_plugin_dev.lsp")
+local lsp = require("omarchy-plugin-dev.lsp")
 assert(lsp.executable(), "installed canonical qmlls was not discovered")
 local lsp_setup, lsp_setup_error = lsp.setup()
 assert(lsp_setup, lsp_setup_error)
@@ -654,13 +654,13 @@ vim.api.nvim_buf_set_lines(
   false,
   { ".pragma library", "function value() { return 1 }" }
 )
-require("omarchy_plugin_dev.mappings").detach(project_buf)
+require("omarchy-plugin-dev.mappings").detach(project_buf)
 vim.keymap.set("n", "<localleader>b", "<cmd>let g:user_mapping_ran = 1<cr>", {
   buffer = project_buf,
   desc = "User conflict",
 })
 vim.bo[project_buf].filetype = "javascript"
-require("omarchy_plugin_dev").attach(project_buf)
+require("omarchy-plugin-dev").attach(project_buf)
 assert(vim.bo[project_buf].filetype == "qmljs", "QML JavaScript filetype was not repaired")
 assert(mapping_by_desc(project_buf, "User conflict"), "existing mapping was overwritten")
 assert(
@@ -684,7 +684,7 @@ assert(
   "Ctrl+Shift+B mapping is missing"
 )
 local lsp_root
-require("omarchy_plugin_dev.lsp").root_dir(project_buf, function(root_dir)
+require("omarchy-plugin-dev.lsp").root_dir(project_buf, function(root_dir)
   lsp_root = root_dir
 end)
 assert(lsp_root == project.canonical(root), "LSP root did not use the detected Omarchy project")
@@ -821,7 +821,7 @@ vim.bo[format_buf].shiftwidth = 2
 vim.bo[format_buf].softtabstop = 2
 vim.bo[format_buf].tabstop = 2
 vim.b[format_buf].autoformat = true
-assert(require("omarchy_plugin_dev").attach(format_buf), "detected QML buffer did not attach")
+assert(require("omarchy-plugin-dev").attach(format_buf), "detected QML buffer did not attach")
 assert(vim.bo[format_buf].expandtab, "detected QML buffer still indents with tabs")
 assert(vim.bo[format_buf].shiftwidth == 4, "detected QML buffer shiftwidth is not four")
 assert(vim.bo[format_buf].softtabstop == 4, "detected QML buffer softtabstop is not four")
@@ -852,7 +852,7 @@ vim.lsp.get_clients = original_get_clients
 vim.lsp.buf.format = original_lsp_format
 
 config.setup({ format_on_save = false })
-assert(require("omarchy_plugin_dev").attach(format_buf), "QML buffer failed to reattach")
+assert(require("omarchy-plugin-dev").attach(format_buf), "QML buffer failed to reattach")
 assert(
   #vim.api.nvim_get_autocmds({ group = "OmarchyPluginDevFormat", buffer = format_buf }) == 0,
   "format_on_save=false left the save hook enabled"
@@ -873,7 +873,7 @@ vim.bo.filetype = "qml"
 local unrelated_buf = vim.api.nvim_get_current_buf()
 vim.bo[unrelated_buf].shiftwidth = 2
 vim.b[unrelated_buf].autoformat = true
-require("omarchy_plugin_dev").attach(unrelated_buf)
+require("omarchy-plugin-dev").attach(unrelated_buf)
 assert(vim.bo[unrelated_buf].shiftwidth == 2, "unrelated QML indentation was changed")
 assert(vim.b[unrelated_buf].autoformat == true, "unrelated QML formatting was changed")
 assert(
@@ -881,7 +881,7 @@ assert(
   "unrelated QML buffer received project mappings"
 )
 local unrelated_lsp_root
-require("omarchy_plugin_dev.lsp").root_dir(unrelated_buf, function(root_dir)
+require("omarchy-plugin-dev.lsp").root_dir(unrelated_buf, function(root_dir)
   unrelated_lsp_root = root_dir
 end)
 assert(unrelated_lsp_root == nil, "LSP root callback claimed an unrelated QML project")
@@ -897,7 +897,7 @@ vim.bo[excluded_buf].shiftwidth = 2
 vim.b[excluded_buf].autoformat = true
 vim.bo[excluded_buf].filetype = "qml"
 assert(
-  not require("omarchy_plugin_dev").attach(excluded_buf),
+  not require("omarchy-plugin-dev").attach(excluded_buf),
   "ownership filter did not reject the QML buffer"
 )
 assert(vim.bo[excluded_buf].shiftwidth == 2, "excluded QML indentation was changed")
@@ -907,7 +907,7 @@ assert(
   "excluded QML buffer received project mappings"
 )
 local excluded_lsp_root
-require("omarchy_plugin_dev.lsp").root_dir(excluded_buf, function(root_dir)
+require("omarchy-plugin-dev.lsp").root_dir(excluded_buf, function(root_dir)
   excluded_lsp_root = root_dir
 end)
 assert(excluded_lsp_root == nil, "LSP root callback claimed excluded QML")

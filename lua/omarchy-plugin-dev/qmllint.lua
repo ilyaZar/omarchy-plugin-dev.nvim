@@ -51,7 +51,7 @@ local function auto_candidates()
 end
 
 function M.resolve()
-  local configured = require("omarchy_plugin_dev.config").get().executables.qmllint
+  local configured = require("omarchy-plugin-dev.config").get().executables.qmllint
   if configured ~= "auto" then
     local path = executable_path(configured)
     if not path then

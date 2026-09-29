@@ -1,9 +1,9 @@
 local M = {}
 
 local function current(bufnr)
-  local info, detection_error = require("omarchy_plugin_dev.project").detect(bufnr or 0)
+  local info, detection_error = require("omarchy-plugin-dev.project").detect(bufnr or 0)
   if not info then
-    require("omarchy_plugin_dev.messages").show(
+    require("omarchy-plugin-dev.messages").show(
       "Not an Omarchy plugin project: " .. detection_error,
       vim.log.levels.WARN
     )
@@ -15,28 +15,28 @@ function M.dashboard(bufnr)
   bufnr = bufnr or 0
   local info = current(bufnr)
   if info then
-    return require("omarchy_plugin_dev.ui").dashboard(info, bufnr)
+    return require("omarchy-plugin-dev.ui").dashboard(info, bufnr)
   end
 end
 
 function M.test(bufnr)
   local info = current(bufnr)
-  return info and require("omarchy_plugin_dev.tasks").test(info.root) or nil
+  return info and require("omarchy-plugin-dev.tasks").test(info.root) or nil
 end
 
 function M.hot_reload(bufnr)
   local info = current(bufnr)
-  return info and require("omarchy_plugin_dev.tasks").hot_reload(info.root) or nil
+  return info and require("omarchy-plugin-dev.tasks").hot_reload(info.root) or nil
 end
 
 function M.rebuild(bufnr)
   local info = current(bufnr)
-  return info and require("omarchy_plugin_dev.tasks").rebuild(info.root) or nil
+  return info and require("omarchy-plugin-dev.tasks").rebuild(info.root) or nil
 end
 
 function M.tasks(bufnr)
   local info = current(bufnr)
-  return info and require("omarchy_plugin_dev.tasks").picker(info.root) or nil
+  return info and require("omarchy-plugin-dev.tasks").picker(info.root) or nil
 end
 
 function M.health()
@@ -48,9 +48,9 @@ function M.edit_tasks(bufnr)
   if not info then
     return
   end
-  local path = require("omarchy_plugin_dev.project").tasks_path(info.root)
+  local path = require("omarchy-plugin-dev.project").tasks_path(info.root)
   if vim.fn.filereadable(path) ~= 1 then
-    require("omarchy_plugin_dev.messages").show(
+    require("omarchy-plugin-dev.messages").show(
       "Project tasks are not initialized. Run :OmaDevInit first.",
       vim.log.levels.INFO
     )
@@ -66,7 +66,7 @@ function M.init_project(bufnr, opts)
   if not info then
     return
   end
-  local project = require("omarchy_plugin_dev.project")
+  local project = require("omarchy-plugin-dev.project")
   local path = project.tasks_path(info.root)
 
   local function initialize(force, test_command)
@@ -81,12 +81,12 @@ function M.init_project(bufnr, opts)
       else
         message = message .. " without a test command"
       end
-      require("omarchy_plugin_dev.messages").show(message)
+      require("omarchy-plugin-dev.messages").show(message)
       if not test_command then
         vim.cmd.edit(vim.fn.fnameescape(created))
       end
     else
-      require("omarchy_plugin_dev.messages").show(init_error, vim.log.levels.ERROR)
+      require("omarchy-plugin-dev.messages").show(init_error, vim.log.levels.ERROR)
     end
     return created
   end

@@ -1,6 +1,6 @@
 local M = {}
 
-local manifest = require("omarchy_plugin_dev.manifest")
+local manifest = require("omarchy-plugin-dev.manifest")
 
 local task_fields = {
   command = true,
@@ -64,7 +64,7 @@ function M.includes(bufnr_or_path, info)
     return false
   end
 
-  local filter = require("omarchy_plugin_dev.config").get().qml_file_filter
+  local filter = require("omarchy-plugin-dev.config").get().qml_file_filter
   if not filter then
     return true
   end
@@ -291,7 +291,7 @@ local function validation_output(result)
 end
 
 local function validation_command(root)
-  local executable = require("omarchy_plugin_dev.config").get().executables.omarchy
+  local executable = require("omarchy-plugin-dev.config").get().executables.omarchy
   if vim.fn.executable(executable) ~= 1 then
     return nil, string.format("cannot validate: %s is not executable", executable)
   end
