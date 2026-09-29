@@ -9,11 +9,19 @@ cleanup() {
 trap cleanup EXIT
 
 project="$test_root/project"
-mkdir -p "$project"
+mkdir -p "$project/ignored"
 printf '%s\n' '{}' >"$project/manifest.json"
+printf '%s\n' 'ignored/' >"$project/.gitignore"
+ln -s -- ../manifest.json "$project/ignored/manifest.json"
 
 mock_omarchy="$test_root/omarchy"
-printf '%s\n' '#!/bin/bash' 'printf '\''validated\n'\''' >"$mock_omarchy"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'set -euo pipefail' \
+  'stage=$3' \
+  '[[ -f $stage/manifest.json ]]' \
+  '[[ ! -e $stage/ignored/manifest.json ]]' \
+  'printf '\''validated\n'\''' >"$mock_omarchy"
 chmod +x "$mock_omarchy"
 (
   cd "$project"
@@ -22,7 +30,9 @@ chmod +x "$mock_omarchy"
 ) >"$test_root/validate.out"
 rg -Fq 'Validating plugin manifest' "$test_root/validate.out"
 rg -Fq 'Project directory:' "$test_root/validate.out"
-rg -Fq '$ omarchy plugin validate <project>' "$test_root/validate.out"
+rg -Fq 'Staging directory:' "$test_root/validate.out"
+rg -Fq '$ stage tracked and non-ignored project files' "$test_root/validate.out"
+rg -Fq '$ omarchy plugin validate <staging>' "$test_root/validate.out"
 rg -Fq 'validated' "$test_root/validate.out"
 rg -Fq 'Plugin manifest is valid' "$test_root/validate.out"
 

@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/lib/task-logging.sh"
+source "$SCRIPT_DIR/lib/stage-project.sh"
 
 fail() {
   task_log_error "$*"
@@ -149,15 +150,27 @@ enable_if_requested() {
   task_log_ok "Enabled plugin: $plugin_id"
 }
 
+runtime_root=${XDG_RUNTIME_DIR:-/tmp}
+stage=$(mktemp -d "$runtime_root/omarchy-plugin-dev.XXXXXX")
+cleanup() {
+  rm -rf -- "$stage"
+}
+trap cleanup EXIT
+
+task_log_info "Preparing validated deployment"
+task_log_context "Project directory: $root"
+task_log_context "Staging directory: $stage"
+task_log_command "stage tracked and non-ignored project files"
+omarchy_plugin_dev_stage_project "$root" "$stage" "$RSYNC"
+task_log_command "omarchy plugin validate <staging>"
+"$OMARCHY" plugin validate "$stage"
+task_log_ok "Prepared validated plugin copy"
+
 if [[ -e $target || -L $target ]]; then
   target_source=$(realpath -- "$target") \
     || fail "installed plugin is a dangling symlink: $target"
   if [[ $target_source == "$root" ]]; then
-    task_log_info "Preparing validated deployment"
-    task_log_context "Project directory: $root"
     task_log_context "Installation directory: $target"
-    task_log_command "omarchy plugin validate <project>"
-    "$OMARCHY" plugin validate "$root"
     if [[ -L $target ]]; then
       task_log_ok "Project source is linked as the installed plugin; no files copied"
     else
@@ -178,38 +191,12 @@ if [[ -e $target/.git || -L $target/.git ]]; then
   fail "installed plugin is a separate git checkout; refusing to overwrite it: $target"
 fi
 
-runtime_root=${XDG_RUNTIME_DIR:-/tmp}
-stage=$(mktemp -d "$runtime_root/omarchy-plugin-dev.XXXXXX")
-cleanup() {
-  rm -rf -- "$stage"
-}
-trap cleanup EXIT
-
-excludes=(
-  --exclude=.git/
-  --exclude=.omarchy-plugin-dev/
-  --exclude=.sublime/
-  --exclude=.luacov
-  --exclude=coverage/
-)
-
-task_log_info "Preparing validated deployment"
-task_log_context "Project directory: $root"
-task_log_context "Staging directory: $stage"
-task_log_command "omarchy plugin validate <project>"
-"$OMARCHY" plugin validate "$root"
-task_log_command "rsync -a <project>/ <staging>/"
-"$RSYNC" -a "${excludes[@]}" -- "$root/" "$stage/"
-task_log_command "omarchy plugin validate <staging>"
-"$OMARCHY" plugin validate "$stage"
-task_log_ok "Prepared validated plugin copy"
-
 if [[ $apply != true ]]; then
   task_log_info "Previewing plugin file installation"
   task_log_context "Installation directory: $target"
   if [[ -d $target ]]; then
     task_log_command "rsync -ani --delete <staging>/ <installation>/"
-    "$RSYNC" -ani --delete "${excludes[@]}" -- "$stage/" "$target/"
+    "$RSYNC" -ani --delete -- "$stage/" "$target/"
   else
     task_log_context "Installation state: target absent; all staged files would be created"
     find "$stage" -mindepth 1 -printf 'create %P\n' | sort
@@ -222,7 +209,7 @@ task_log_info "Installing plugin files"
 task_log_context "Installation directory: $target"
 mkdir -p -- "$plugins_dir" "$target"
 task_log_command "rsync -a --delete <staging>/ <installation>/"
-"$RSYNC" -a --delete --delay-updates "${excludes[@]}" -- "$stage/" "$target/"
+"$RSYNC" -a --delete --delay-updates -- "$stage/" "$target/"
 task_log_command "omarchy plugin validate <installation>"
 "$OMARCHY" plugin validate "$target"
 task_log_ok "Installed plugin files: $plugin_id"

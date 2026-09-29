@@ -24,9 +24,10 @@ local function column(value, width)
   return value .. string.rep(" ", math.max(width - vim.fn.strdisplaywidth(value), 1))
 end
 
-local function field(label, value, group, detail)
+local function field(label, value, group, detail, action)
   return {
     selectable = true,
+    action = action,
     value = value,
     { "  " .. column(label .. ":", 22), "Normal" },
     { value, group or "Normal" },
@@ -104,13 +105,15 @@ local function dashboard_rows(info, bufnr, width)
   local config = require("omarchy-plugin-dev.config").get()
   local project = require("omarchy-plugin-dev.project")
   local rows = {}
-  local function section(label)
+  local function section(label, hint)
     if #rows > 0 then
       rows[#rows + 1] = {}
     end
+    hint = hint and " " .. hint .. " " or ""
     rows[#rows + 1] = {
       { "  " .. label .. " ", { "DiagnosticOk", "Bold" } },
-      { string.rep("-", math.max(width - #label - 5, 0)), "Comment" },
+      { hint, "Comment" },
+      { string.rep("-", math.max(width - #label - #hint - 5, 0)), "Comment" },
     }
   end
   local function add(row)
@@ -149,13 +152,14 @@ local function dashboard_rows(info, bufnr, width)
   local overview = rows
   rows = {}
 
-  section("Build")
+  section("Build", config.config_file and "Enter: edit keybindings" or "Enter: settings help")
   add(
     field(
       "hot reload",
       mapping_label(config.mappings, "hot_reload"),
       "DiagnosticInfo",
-      "check, deploy, restart shell"
+      "check, deploy, restart shell",
+      "edit_config"
     )
   )
   add(
@@ -163,7 +167,8 @@ local function dashboard_rows(info, bufnr, width)
       "build",
       mapping_label(config.mappings, "build"),
       "DiagnosticInfo",
-      "check, test, deploy, restart shell"
+      "check, test, deploy, restart shell",
+      "edit_config"
     )
   )
 

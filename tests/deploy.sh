@@ -9,13 +9,18 @@ trap cleanup EXIT
 
 project="$test_root/project"
 plugins="$test_root/plugins"
-mkdir -p "$project/.omarchy-plugin-dev"
+mkdir -p "$project/.omarchy-plugin-dev" "$project/ignored"
 
 printf '%s\n' 'import QtQuick' 'Item {}' >"$project/Service.qml"
 printf '%s\n' \
   '{"schemaVersion":1,"id":"dev.deploy-test","name":"Deploy Test","version":"1","kinds":["service"],"entryPoints":{"service":"Service.qml"}}' \
   >"$project/manifest.json"
 printf '%s\n' '{}' >"$project/.omarchy-plugin-dev/task-config.json"
+printf '%s\n' '.omarchy-plugin-dev/' 'ignored/' >"$project/.gitignore"
+ln -s -- ../Service.qml "$project/ignored/Service.qml"
+git -C "$project" init --quiet
+git -C "$project" add .gitignore Service.qml manifest.json
+printf '%s\n' 'import QtQuick' 'Item { objectName: "untracked" }' >"$project/Extra.qml"
 
 OMARCHY_PLUGINS_DIR="$plugins" ./scripts/deploy --dry-run "$project" >/dev/null
 [[ ! -e $plugins/dev.deploy-test ]] || {
@@ -29,13 +34,15 @@ rg -Fq 'Preparing validated deployment' "$test_root/deploy.out"
 rg -Fq 'plugin validate' "$test_root/deploy.out"
 rg -Fq 'Prepared validated plugin copy' "$test_root/deploy.out"
 rg -Fq 'Installing plugin files' "$test_root/deploy.out"
-rg -Fq 'rsync' "$test_root/deploy.out"
+rg -Fq 'stage tracked and non-ignored project files' "$test_root/deploy.out"
 rg -Fq 'Installed plugin files: dev.deploy-test' "$test_root/deploy.out"
 if rg -Fqi restart "$test_root/deploy.out"; then
   printf '[error] deployment output claims responsibility for restarting the shell\n' >&2
   exit 1
 fi
+[[ -f $plugins/dev.deploy-test/Extra.qml ]]
 [[ ! -e $plugins/dev.deploy-test/.omarchy-plugin-dev ]]
+[[ ! -e $plugins/dev.deploy-test/ignored ]]
 
 printf '%s\n' stale >"$plugins/dev.deploy-test/stale.txt"
 printf '%s\n' 'import QtQuick' 'Item { objectName: "updated" }' >"$project/Service.qml"

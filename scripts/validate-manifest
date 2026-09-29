@@ -3,18 +3,32 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/lib/task-logging.sh"
+source "$SCRIPT_DIR/lib/stage-project.sh"
 
 OMARCHY=${OMARCHY_PLUGIN_DEV_OMARCHY:-omarchy}
-command -v "$OMARCHY" >/dev/null 2>&1 || {
-  task_log_error "$OMARCHY is not executable"
-  exit 1
-}
+RSYNC=${OMARCHY_PLUGIN_DEV_RSYNC:-rsync}
+for command in "$OMARCHY" "$RSYNC"; do
+  command -v "$command" >/dev/null 2>&1 || {
+    task_log_error "$command is not executable"
+    exit 1
+  }
+done
 
 root=$(pwd -P)
+runtime_root=${XDG_RUNTIME_DIR:-/tmp}
+stage=$(mktemp -d "$runtime_root/omarchy-plugin-dev.XXXXXX")
+cleanup() {
+  rm -rf -- "$stage"
+}
+trap cleanup EXIT
+
 task_log_info "Validating plugin manifest"
 task_log_context "Project directory: $root"
-task_log_command "omarchy plugin validate <project>"
-if "$OMARCHY" plugin validate "$root"; then
+task_log_context "Staging directory: $stage"
+task_log_command "stage tracked and non-ignored project files"
+omarchy_plugin_dev_stage_project "$root" "$stage" "$RSYNC"
+task_log_command "omarchy plugin validate <staging>"
+if "$OMARCHY" plugin validate "$stage"; then
   task_log_ok "Plugin manifest is valid"
 else
   status=$?

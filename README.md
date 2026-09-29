@@ -21,7 +21,7 @@ Requires Neovim 0.11+, Omarchy Quattro, [overseer.nvim][overseer], Qt 6
 `qmllint`, `jq`, and `rsync`. Language support and formatting also need
 `qmlls`; shell logs use `journalctl`.
 
-Using [lazy.nvim][lazy]:
+Add this [lazy.nvim][lazy] spec to your Neovim plugin configuration:
 
 ```lua
 {

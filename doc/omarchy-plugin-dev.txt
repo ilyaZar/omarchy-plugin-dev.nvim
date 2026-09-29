@@ -26,6 +26,7 @@ REQUIREMENTS                                    *omarchy-plugin-dev-requirements
 - Neovim 0.11 or newer
 - stevearc/overseer.nvim
 - omarchy and Qt 6 qmllint for Check
+- omarchy-shell for automatic plugin enabling
 - journalctl for shell logs
 - jq and rsync for staged deployment
 - Qt qmlls for LSP features
@@ -54,10 +55,29 @@ INITIALIZATION                                *omarchy-plugin-dev-initialization
     .omarchy-plugin-dev/tasks.json files remain readable and are replaced with
     task-config.json only after explicit overwrite approval.
 
+    Replacement creates a new configuration from the selected test runner;
+    it does not preserve custom tasks from the previous file.
+
+Initialization is optional for the default :OmaDevHotReload workflow. Tests
+and custom tasks can be configured in task-config.json. For example: >json
+  {
+    "version": 1,
+    "tasks": {
+      "test": {
+        "command": ["./scripts/test"]
+      }
+    }
+  }
+<
+The current filename takes precedence when both it and legacy tasks.json
+exist. Initialization adds .omarchy-plugin-dev/ to the project's .gitignore.
+
 Schema version 1 contains a "tasks" object. Each task contains a non-empty
 "command" argument array and may contain a string "description". Commands
 always run at the detected project root. Shell command strings are invalid.
 The "test" task supplies the Test action. No project-local Lua is loaded.
+The names check, deploy, hot_reload, logs, and build are reserved in JSON.
+Other names appear as custom tasks in the dashboard's task picker (press p).
 
 ==============================================================================
 COMMANDS                                            *omarchy-plugin-dev-commands*
@@ -89,20 +109,23 @@ COMMANDS                                            *omarchy-plugin-dev-commands
 ==============================================================================
 MAPPINGS                                            *omarchy-plugin-dev-mappings*
 
-Defaults exist only in QML buffers inside detected Omarchy projects:
+Defaults exist only in QML and qmljs buffers inside detected Omarchy projects:
 
   <C-b>            Check, deploy, and restart once
   <C-S-b>          Test, deploy, and restart once
   <localleader>t   Test
   <localleader>o   Dashboard
 
-Existing mappings are preserved. The plugin does not change maplocalleader.
-Every mapping is buffer-local and has a human-readable description.
+Test and dashboard mappings preserve existing mappings at their configured
+keys. Build mappings take precedence. The plugin does not change
+maplocalleader. Every mapping is normal-mode, buffer-local, and has a
+human-readable description.
 
 ==============================================================================
 CONFIGURATION                                  *omarchy-plugin-dev-configuration*
 
-Call setup through a plugin manager's opts or directly: >lua
+Call setup through a plugin manager's opts or directly. These are the defaults:
+>lua
   require("omarchy-plugin-dev").setup({
     diagnostics = {
       virtual_text = false,
@@ -114,21 +137,31 @@ Call setup through a plugin manager's opts or directly: >lua
       enabled = true,
       hot_reload = "<C-b>",
       build = "<C-S-b>",
-      test = false,
+      test = "<localleader>t",
+      menu = "<localleader>o",
     },
     executables = {
+      journalctl = "journalctl",
       jq = "jq",
       omarchy = "omarchy",
       qmllint = "auto",
       qml_language_server = "auto",
       rsync = "rsync",
     },
+    logs = {
+      follow = true,
+      match = "_COMM=quickshell",
+    },
     notify = true,
     log_level = vim.log.levels.INFO,
+    qml_import_paths = { "/usr/share/omarchy/shell" },
+    tasks = {},
   })
 <
-enable_auto enables every deployment. If disabled, enable_first_install
-enables only a new installation.
+enable_auto enables the plugin on every deployment. If false,
+enable_first_install enables it only when the installation did not exist.
+Set both to false to leave enabling to you. Neither option triggers a build
+when a file opens.
 
 Detected plugin QML uses four-space indentation and is formatted by qmlls
 before each save. This follows Qt's official QML Coding Conventions and the
@@ -168,6 +201,12 @@ The qmllint value "auto" prefers /usr/lib/qt6/bin/qmllint and accepts a PATH
 candidate only when it reports Qt 6 or newer. An explicit override is honored
 as-is. The dashboard shows the selected path and version.
 
+Each executables entry accepts a command name or path. qml_language_server
+and qmllint also accept "auto". Set qml_import_paths to an array of QML import
+directories; its default contains /usr/share/omarchy/shell. A configured array
+replaces that default, so include the shell directory if it is still needed.
+The plugin adds discovered Qt imports and an Omarchy import bridge separately.
+
 The QML language server prefers the system Qt qmlls, then PATH and Mason. A
 generic qmlls attached by another Neovim integration is detached only from
 detected Omarchy Plugin buffers. After attachment settles, a detached client
@@ -187,6 +226,43 @@ diagnostic pickers, and the Overseer lint quickfix list remain available. Set
 diagnostics.virtual_text=true to restore it, or diagnostics=false to inherit
 Neovim's global diagnostic display.
 
+TASK OVERRIDES                                  *omarchy-plugin-dev-task-overrides*
+
+The setup option tasks contains Overseer task specifications, separate from
+the project JSON format. Built-in override names are check, test, hot_reload,
+build, and logs. Deploy and restart are internal steps; change their parent
+workflow to customize them.
+
+A table shallowly replaces fields of a built-in specification; nested fields
+such as strategy and components are replaced as a whole. A function receives
+{ root, default, project }, where default is a copy of the built-in spec and
+project is the plugin's project module. Return the task specification to run.
+For test without a project test task, default is nil.
+
+For example, rename the check task while retaining its validation and lint
+steps: >lua
+  require("omarchy-plugin-dev").setup({
+    tasks = {
+      check = function(context)
+        context.default.name = "Validate and lint plugin"
+        return context.default
+      end,
+    },
+  })
+<
+A build table with cmd or strategy replaces the complete workflow. A
+build function may also provide a workflow without a configured test.
+These overrides own their check, test, deployment, and restart policy.
+A partial build table, such as a name change, still requires a test task.
+
+Additional task names appear in the dashboard's picker. Their setup values
+may be full Overseer specs or functions receiving { root, project }. A
+project JSON task with the same custom name takes precedence over setup.
+The built-in test task instead applies its setup override to the JSON spec.
+
+All returned specs run at the detected project root and receive project
+metadata. Relative cmd executables containing a slash resolve from that root.
+
 ==============================================================================
 BUILD SEMANTICS                                        *omarchy-plugin-dev-build*
 
@@ -195,11 +271,20 @@ use an Overseer orchestrator and expose omarchy restart shell as their final
 step. This prevents QML components and IPC handlers from surviving from the
 previous plugin generation.
 
-Deployment never runs omarchy plugin update. A symlink from the installed
-plugin to the project is preserved, and a project opened directly inside its
-installed checkout needs no copy. Otherwise deployment synchronizes a clean
-staged copy. A separate git-managed installation is refused rather than
-modified, because doing so would dirty the checkout and break normal updates.
+Deployment never runs omarchy plugin update. In Git worktrees, validation and
+deployment use a staged copy of tracked and nonignored untracked files.
+Tracked files are included even if they match ignore rules; deleted files
+are omitted. Outside Git, staging applies .gitignore files as rsync filters
+and excludes .git/, .omarchy-plugin-dev/, .sublime/, .luacov, and coverage/.
+
+A symlink from the installed plugin to the project is preserved, and a project
+opened directly inside its installed checkout needs no copy. Otherwise
+deployment synchronizes the validated staged copy. A separate git-managed
+installation is refused rather than modified, because doing so would dirty the
+checkout and break normal updates. A symlink to a different source is also
+refused. Synchronization uses rsync --delete, removing installed files absent
+from the staged source, including files excluded during staging. Linked and
+in-place installations keep their source files unchanged.
 
 ==============================================================================
 TROUBLESHOOTING                              *omarchy-plugin-dev-troubleshooting*
@@ -209,5 +294,9 @@ Run :OmaDevHealth, or invoke the native command directly: >vim
 <
 The report checks the Neovim version, Overseer, exact executable paths, the
 Qt 6 qmllint version, and the QML language server.
+
+For runtime output, open :OmaDev, press p, and choose Shell logs. This uses
+journalctl for the current user's current boot, following Quickshell logs by
+default. Configure logs.follow and logs.match to change that behavior.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

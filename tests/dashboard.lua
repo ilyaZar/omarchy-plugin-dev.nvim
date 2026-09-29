@@ -71,7 +71,7 @@ local function check_layout(bufnr)
     local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, { index - 1, 0 }, { index - 1, -1 }, {
       details = true,
     })
-    if line:match("^  [%w-][%w %-]*:") then
+    if line:match("^  [%w-][%w %-]*:  ") then
       assert(marks[1][4].hl_group == "Normal", "field label is dimmed")
       if #marks == 3 then
         local detail = marks[3]
@@ -137,14 +137,24 @@ assert(
 assert(not contents:find("_COMM=custom", 1, true), "actions includes tool rows")
 assert(contents:find("<F5>", 1, true), "dashboard lost configured mapping")
 assert(contents:find("disabled", 1, true), "dashboard hides disabled mapping")
-assert(selected_text(buf, win):find("[h]", 1, true), "actions did not select its first action")
+assert(contents:find("Enter: settings help", 1, true), "build rows hide their Enter behavior")
+assert(selected_text(buf, win):find("hot reload:", 1, true), "actions did not select its first row")
+key(buf, "j")()
+assert(selected_text(buf, win):find("build:", 1, true), "build mapping row is not selectable")
+key(buf, "j")()
+assert(selected_text(buf, win):find("[h]", 1, true), "navigation did not reach the lower actions")
+key(buf, "k")()
+assert(
+  selected_text(buf, win):find("build:", 1, true),
+  "navigation did not return to the build rows"
+)
 key(buf, "G")()
 assert(selected_text(buf, win):find("[c]", 1, true), "G did not select last action")
 key(buf, "j")()
 assert(selected_text(buf, win):find("[c]", 1, true), "selection moved past last action")
 key(buf, "gg")()
 key(buf, "k")()
-assert(selected_text(buf, win):find("[h]", 1, true), "selection moved before first action")
+assert(selected_text(buf, win):find("hot reload:", 1, true), "selection moved before first row")
 for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
   assert(not line:match("%[h%].-%[b%]"), "actions still share a row")
 end
@@ -188,6 +198,8 @@ for _, tab in ipairs({ "1", "2" }) do
 end
 
 for index, method in ipairs({
+  "edit_config",
+  "edit_config",
   "hot_reload",
   "build",
   "test",
@@ -214,7 +226,9 @@ assert(
   text(settings_buf):find("Open my settings.lua", 1, true),
   "settings file explanation is missing"
 )
-key(settings_buf, "q")()
+assert(text(settings_buf):find("Enter: edit keybindings", 1, true), "edit hint is missing")
+key(settings_buf, "<CR>")()
+assert(calls[#calls][1] == "edit_config", "build row Enter did not open settings")
 
 local old_buf = ui.dashboard(info, source_buf)
 local late_validation = pending[#pending]
