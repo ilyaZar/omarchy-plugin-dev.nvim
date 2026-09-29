@@ -67,7 +67,7 @@ command:
 ```
 
 This runs the official Omarchy validator before creating the ignored file
-`.omarchy-plugin-dev/tasks.json`. If an executable `./scripts/test` or
+`.omarchy-plugin-dev/task-config.json`. If an executable `./scripts/test` or
 `./tests/all.sh` exists, choose whether to use it. For example:
 
 ```json
@@ -82,39 +82,31 @@ This runs the official Omarchy validator before creating the ignored file
 ```
 
 When there is no conventional aggregate runner, initialization creates an empty
-`tasks` object and opens the file instead of inventing a command. Then use
-`<C-b>` while working: it validates, lints, deploys, and restarts the shell. Use
-`<C-S-b>` to run the configured test before the same deploy-and-restart path.
+`tasks` object and opens the file instead of inventing a command. Legacy
+`.omarchy-plugin-dev/tasks.json` files remain readable; `:OmaDevInit!` replaces
+one with `task-config.json`. Then use `<C-b>` while working: it validates,
+lints, deploys, and restarts the shell. Use `<C-S-b>` to run the configured test
+before the same deploy-and-restart path.
 
 Run `:OmaDev` to see the detected root, tool status, build behavior, and
 available actions. Lightweight manifest recognition is shown separately from the
 asynchronously reported result of `omarchy plugin validate`. Press `p` there to
 run built-in or project-defined tasks.
 
-## Commands
+## Commands and mappings
 
-| Command            | Action                               |
-| ------------------ | ------------------------------------ |
-| `:OmaDev`          | Open the project dashboard           |
-| `:OmaDevInit[!]`   | Configure or replace local task JSON |
-| `:OmaDevTest`      | Run the configured test command      |
-| `:OmaDevHotReload` | Validate, deploy, and restart once   |
-| `:OmaDevRebuild`   | Test, deploy, and restart once       |
-| `:OmaDevHealth`    | Run the native Neovim health check   |
+| Command            | Default key      | Action                           |
+| ------------------ | ---------------- | -------------------------------- |
+| `:OmaDev`          | `<localleader>o` | Open the project dashboard       |
+| `:OmaDevInit[!]`   |                  | Configure or replace task JSON   |
+| `:OmaDevTest`      | `<localleader>t` | Run the configured test command  |
+| `:OmaDevHotReload` | `<C-b>`          | Check, deploy, and restart       |
+| `:OmaDevRebuild`   | `<C-S-b>`        | Check, test, deploy, and restart |
+| `:OmaDevHealth`    |                  | Run the Neovim health check      |
 
-## Default mappings
-
-Mappings are normal-mode and buffer-local to detected plugin projects.
-
-| Mapping          | Action                     |
-| ---------------- | -------------------------- |
-| `<C-b>`          | Check, deploy, and restart |
-| `<C-S-b>`        | Test, deploy, and restart  |
-| `<localleader>t` | Test                       |
-| `<localleader>o` | Open the project dashboard |
-
-Existing mappings are preserved. The plugin never changes
-`vim.g.maplocalleader`.
+Mappings are normal-mode and buffer-local to detected plugin projects. Existing
+`<localleader>` mappings are preserved; build shortcuts take precedence. The
+plugin never changes `vim.g.maplocalleader`.
 
 ## Configuration
 
