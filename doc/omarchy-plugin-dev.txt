@@ -170,11 +170,11 @@ https://doc.qt.io/qt-6/qml-codingconventions.html
 https://doc.qt.io/qt-6/qtqml-tooling-qmlformat.html
 Set format_on_save=false to opt out.
 
-QML JavaScript (qmljs) keeps language support and diagnostics, but is not
-formatted on save: qmlls may never answer its formatting requests. The plugin
-sets b:autoformat=false to suppress editor-wide save formatting for these
-buffers, even with format_on_save=false. Their indentation is unchanged;
-leaving plugin ownership restores the previous b:autoformat value.
+QML JavaScript (qmljs) keeps language support and diagnostics, but the plugin
+does not format it on save: qmlls may never answer its formatting requests. It
+sets b:autoformat=false for editor hooks that honor that convention, even with
+format_on_save=false. Their indentation is unchanged; leaving plugin ownership
+restores the previous b:autoformat value.
 
 Set mappings to false, mappings.enabled to false, or an individual mapping to
 false to disable defaults. Executable names, QML import paths, notifications,

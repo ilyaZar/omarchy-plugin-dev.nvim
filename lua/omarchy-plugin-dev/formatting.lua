@@ -56,7 +56,7 @@ function M.attach(bufnr)
     vim.bo[bufnr].tabstop = 4
   end
 
-  -- Own both filetypes so editor-wide hooks cannot fall back to qmlls.
+  -- Honor editor configurations that use b:autoformat as an opt-out.
   vim.b[bufnr].autoformat = false
   if filetype == "qmljs" or not require("omarchy-plugin-dev.config").get().format_on_save then
     return true
