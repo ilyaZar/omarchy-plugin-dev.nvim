@@ -96,6 +96,13 @@ write(ignored_qml_path, { "import QtQuick", "Item {}" })
 write(vim.fs.joinpath(root, ".gitignore"), { "/ignored/" })
 local git_init = vim.system({ "git", "-C", root, "init", "--quiet" }, { text = true }):wait()
 assert(git_init.code == 0, "temporary Git project was not initialized: " .. (git_init.stderr or ""))
+local deleted_qml_path = vim.fs.joinpath(root, "Deleted.qml")
+write(deleted_qml_path, { "import QtQuick", "Item {}" })
+assert(
+  vim.system({ "git", "-C", root, "add", "Deleted.qml" }):wait().code == 0,
+  "deleted QML fixture was not indexed"
+)
+assert(vim.fn.delete(deleted_qml_path) == 0, "deleted QML fixture remained on disk")
 
 local filetype = require("omarchy-plugin-dev.filetype")
 assert(
@@ -512,6 +519,10 @@ assert(
 assert(
   not vim.tbl_contains(lint_step.cmd, ignored_qml_path),
   "lint task included a Git-ignored QML artifact"
+)
+assert(
+  not vim.tbl_contains(lint_step.cmd, deleted_qml_path),
+  "lint task included a deleted indexed QML file"
 )
 assert(
   not vim.tbl_contains(lint_step.cmd, regular_js_path),

@@ -131,7 +131,8 @@ local function qml_files(root)
   local files = {}
   for _, path in ipairs(source_files(root)) do
     if
-      (path:match("%.qml$") or require("omarchy-plugin-dev.filetype").is_qml_javascript(path))
+      vim.fn.filereadable(path) == 1
+      and (path:match("%.qml$") or require("omarchy-plugin-dev.filetype").is_qml_javascript(path))
       and project.includes(path, info)
     then
       files[#files + 1] = path
