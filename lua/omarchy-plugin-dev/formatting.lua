@@ -9,6 +9,10 @@ end
 
 function M.format(bufnr)
   bufnr = bufnr or 0
+  -- qmlls advertises formatting but may never reply for QML JavaScript.
+  if vim.bo[bufnr].filetype ~= "qml" then
+    return false
+  end
   local clients = vim.lsp.get_clients({
     bufnr = bufnr,
     name = require("omarchy-plugin-dev.lsp").name,
@@ -29,7 +33,8 @@ end
 function M.attach(bufnr)
   bufnr = bufnr or 0
   clear(bufnr)
-  if vim.bo[bufnr].filetype ~= "qml" then
+  local filetype = vim.bo[bufnr].filetype
+  if filetype ~= "qml" and filetype ~= "qmljs" then
     M.detach(bufnr)
     return false
   end
@@ -44,15 +49,16 @@ function M.attach(bufnr)
     }
   end
 
-  vim.bo[bufnr].expandtab = true
-  vim.bo[bufnr].shiftwidth = 4
-  vim.bo[bufnr].softtabstop = 4
-  vim.bo[bufnr].tabstop = 4
+  if filetype == "qml" then
+    vim.bo[bufnr].expandtab = true
+    vim.bo[bufnr].shiftwidth = 4
+    vim.bo[bufnr].softtabstop = 4
+    vim.bo[bufnr].tabstop = 4
+  end
 
-  -- This plugin owns formatting for detected QML buffers so editor-wide hooks
-  -- do not format the same buffer a second time.
+  -- Own both filetypes so editor-wide hooks cannot fall back to qmlls.
   vim.b[bufnr].autoformat = false
-  if not require("omarchy-plugin-dev.config").get().format_on_save then
+  if filetype == "qmljs" or not require("omarchy-plugin-dev.config").get().format_on_save then
     return true
   end
 

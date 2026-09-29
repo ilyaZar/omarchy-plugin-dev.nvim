@@ -733,6 +733,10 @@ vim.keymap.set("n", "<localleader>b", "<cmd>let g:user_mapping_ran = 1<cr>", {
 vim.bo[project_buf].filetype = "javascript"
 require("omarchy-plugin-dev").attach(project_buf)
 assert(vim.bo[project_buf].filetype == "qmljs", "QML JavaScript filetype was not repaired")
+assert(
+  vim.tbl_contains(vim.lsp.config[lsp.name].filetypes, "qmljs"),
+  "project-aware qmlls no longer supports QML JavaScript"
+)
 assert(mapping_by_desc(project_buf, "User conflict"), "existing mapping was overwritten")
 assert(
   not mapping_by_desc(project_buf, "Omarchy Plugin: check"),
@@ -931,6 +935,72 @@ assert(
 assert(vim.bo[format_buf].shiftwidth == 4, "format opt-out changed QML indentation")
 config.setup()
 vim.api.nvim_buf_delete(format_buf, { force = true })
+
+local formatting = require("omarchy-plugin-dev.formatting")
+local qmljs_format_requests = 0
+vim.lsp.buf.format = function()
+  qmljs_format_requests = qmljs_format_requests + 1
+end
+local fallback_hook = vim.api.nvim_create_autocmd("BufWritePre", {
+  buffer = project_buf,
+  callback = function(event)
+    if vim.b[event.buf].autoformat ~= false then
+      vim.lsp.buf.format({ bufnr = event.buf })
+    end
+  end,
+})
+for _, prior in ipairs({ { autoformat = true }, { autoformat = false }, {} }) do
+  for _, enabled in ipairs({ true, false }) do
+    formatting.detach(project_buf)
+    vim.b[project_buf].autoformat = prior.autoformat
+    vim.bo[project_buf].shiftwidth = 2
+    config.setup({ format_on_save = enabled })
+    assert(require("omarchy-plugin-dev").attach(project_buf), "QML JavaScript did not attach")
+    assert(require("omarchy-plugin-dev").attach(project_buf), "QML JavaScript did not reattach")
+    assert(
+      vim.bo[project_buf].filetype == "qmljs",
+      "formatting changed the QML JavaScript filetype"
+    )
+    assert(
+      vim.b[project_buf].autoformat == false,
+      "QML JavaScript left editor-wide formatting active"
+    )
+    assert(vim.bo[project_buf].shiftwidth == 2, "QML JavaScript indentation was changed")
+    assert(
+      #vim.api.nvim_get_autocmds({ group = "OmarchyPluginDevFormat", buffer = project_buf }) == 0,
+      "QML JavaScript received a qmlls format-on-save hook"
+    )
+    vim.api.nvim_exec_autocmds("BufWritePre", { buffer = project_buf })
+    assert(not formatting.format(project_buf), "QML JavaScript accepted explicit qmlls formatting")
+    assert(qmljs_format_requests == 0, "QML JavaScript issued an LSP formatting request")
+    formatting.detach(project_buf)
+    assert(
+      vim.b[project_buf].autoformat == prior.autoformat,
+      "detach lost the prior autoformat value"
+    )
+    assert(
+      require("omarchy-plugin-dev").attach(project_buf),
+      "QML JavaScript did not reclaim formatting"
+    )
+    config.setup({
+      format_on_save = enabled,
+      qml_file_filter = function()
+        return false
+      end,
+    })
+    assert(
+      not require("omarchy-plugin-dev").attach(project_buf),
+      "excluded QML JavaScript was retained"
+    )
+    assert(
+      vim.b[project_buf].autoformat == prior.autoformat,
+      "release lost the prior autoformat value"
+    )
+  end
+end
+vim.api.nvim_del_autocmd(fallback_hook)
+vim.lsp.buf.format = original_lsp_format
+config.setup()
 
 for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
   assert(
