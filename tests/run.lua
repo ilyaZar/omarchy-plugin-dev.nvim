@@ -1108,6 +1108,29 @@ assert(
   "dashboard does not show the configured test state"
 )
 vim.cmd.close()
+local source_win = vim.api.nvim_get_current_win()
+local other_project_buf = vim.fn.bufadd(vim.fs.joinpath(no_test_root, "Service.qml"))
+vim.fn.bufload(other_project_buf)
+local action_root
+local original_build = tasks.build
+tasks.build = function(target)
+  action_root = target
+end
+vim.cmd.OmaDev()
+local moving_dashboard_buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_win_set_buf(source_win, other_project_buf)
+for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(moving_dashboard_buf, "n")) do
+  if mapping.lhs == "b" then
+    mapping.callback()
+    break
+  end
+end
+assert(
+  action_root == project.canonical(root),
+  "dashboard action followed the changed source window"
+)
+tasks.build = original_build
+vim.api.nvim_win_set_buf(source_win, project_buf)
 vim.cmd.buffer(project_buf)
 vim.cmd.OmaDevHealth()
 assert(vim.bo.filetype == "checkhealth", "health report did not open")

@@ -13,6 +13,9 @@ end
 
 function M.dashboard(bufnr)
   bufnr = bufnr or 0
+  if bufnr == 0 then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
   local info, inspection_error = require("omarchy-plugin-dev.project").inspect(bufnr)
   if not info then
     require("omarchy-plugin-dev.messages").show(
