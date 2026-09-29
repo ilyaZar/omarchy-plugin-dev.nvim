@@ -9,12 +9,12 @@ local definitions = {
   menu = { desc = "Omarchy Plugin: project dashboard", method = "dashboard" },
 }
 
-local function existing_mapping(bufnr, lhs)
+local function current_mapping(bufnr, lhs)
   local mapping = {}
   vim.api.nvim_buf_call(bufnr, function()
     mapping = vim.fn.maparg(lhs, "n", false, true)
   end)
-  return type(mapping) == "table" and not vim.tbl_isempty(mapping)
+  return type(mapping) == "table" and not vim.tbl_isempty(mapping) and mapping or nil
 end
 
 function M.detach(bufnr)
@@ -23,11 +23,14 @@ function M.detach(bufnr)
     attached[bufnr] = nil
     return
   end
-  for _, mapping in ipairs(installed) do
-    for _, current in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
-      if current.lhs == mapping.lhs and current.desc == mapping.desc then
-        pcall(vim.keymap.del, "n", mapping.configured_lhs, { buffer = bufnr })
-        break
+  for index = #installed, 1, -1 do
+    local mapping = installed[index]
+    if vim.deep_equal(current_mapping(bufnr, mapping.lhs), mapping.installed) then
+      vim.keymap.del("n", mapping.lhs, { buffer = bufnr })
+      if mapping.previous then
+        vim.api.nvim_buf_call(bufnr, function()
+          vim.fn.mapset(mapping.previous)
+        end)
       end
     end
   end
@@ -47,7 +50,8 @@ function M.attach(bufnr)
   attached[bufnr] = {}
   for key, definition in pairs(definitions) do
     local lhs = mappings[key]
-    if lhs and lhs ~= false and (definition.force or not existing_mapping(bufnr, lhs)) then
+    local previous = lhs and current_mapping(bufnr, lhs)
+    if lhs and lhs ~= false and (definition.force or not previous) then
       vim.keymap.set("n", lhs, function()
         require("omarchy-plugin-dev.actions")[definition.method](bufnr)
       end, {
@@ -56,16 +60,11 @@ function M.attach(bufnr)
         silent = true,
       })
 
-      for _, current in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
-        if current.desc == definition.desc then
-          attached[bufnr][#attached[bufnr] + 1] = {
-            lhs = current.lhs,
-            configured_lhs = lhs,
-            desc = definition.desc,
-          }
-          break
-        end
-      end
+      attached[bufnr][#attached[bufnr] + 1] = {
+        lhs = lhs,
+        installed = current_mapping(bufnr, lhs),
+        previous = previous and previous.buffer == 1 and previous or nil,
+      }
     end
   end
 end

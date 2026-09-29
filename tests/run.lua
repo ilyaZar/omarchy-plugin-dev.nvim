@@ -730,6 +730,38 @@ assert(
 rawset(vim, "notify", original_notify)
 config.setup()
 
+local mapping_buf = vim.api.nvim_create_buf(true, false)
+local mappings = require("omarchy-plugin-dev.mappings")
+local prior_build = function() end
+vim.keymap.set("n", "<C-b>", prior_build, { buffer = mapping_buf, desc = "Prior build" })
+mappings.attach(mapping_buf)
+assert(
+  mapping_by_desc(mapping_buf, "Omarchy Plugin: build and restart"),
+  "build mapping did not take precedence"
+)
+mappings.detach(mapping_buf)
+assert(
+  mapping_by_desc(mapping_buf, "Prior build").callback == prior_build,
+  "detaching lost the prior build mapping"
+)
+mappings.attach(mapping_buf)
+local replacement = function() end
+vim.keymap.set("n", "<C-b>", replacement, { buffer = mapping_buf, desc = "Replacement" })
+mappings.detach(mapping_buf)
+assert(
+  mapping_by_desc(mapping_buf, "Replacement").callback == replacement,
+  "detaching overwrote a newer mapping"
+)
+config.setup({ mappings = { hot_reload = "<C-b>", build = "<C-b>" } })
+mappings.attach(mapping_buf)
+mappings.detach(mapping_buf)
+assert(
+  mapping_by_desc(mapping_buf, "Replacement").callback == replacement,
+  "overlapping build mappings lost the prior mapping"
+)
+config.setup()
+vim.api.nvim_buf_delete(mapping_buf, { force = true })
+
 local project_buf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_set_current_buf(project_buf)
 vim.api.nvim_buf_set_name(project_buf, qml_js_path)
