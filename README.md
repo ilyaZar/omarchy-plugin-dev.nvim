@@ -103,6 +103,8 @@ configure a runner; detected scripts are never run automatically. Failed checks,
 failed tests, or a missing configured test executable stop deployment.
 Successful builds restart the shell once.
 
+Test detection skips Git-ignored files and tests you've removed.
+
 - Working directly in the installed plugin, or through a symlink to your
   project, requires no copying.
 - Otherwise, deployment copies your plugin files into the installation. Files
