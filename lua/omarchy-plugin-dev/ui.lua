@@ -207,6 +207,8 @@ local function open(state)
     footer = {
       { " [j/k]", "DiagnosticOk" },
       { " move  ", "Comment" },
+      { "[e]", "DiagnosticOk" },
+      { "dit tasks  ", "Comment" },
       { "[Tab]", "DiagnosticOk" },
       { " switch  ", "Comment" },
       { "[r]", "DiagnosticOk" },

@@ -246,6 +246,7 @@ assert(footer, "dashboard footer is missing")
 local footer_text = table.concat(vim.tbl_map(function(chunk)
   return chunk[1]
 end, footer))
+assert(footer_text:find("[e]dit tasks", 1, true), "task editing shortcut is missing from footer")
 assert(
   footer_text:find("[Tab] switch  [r]efresh  [q/Esc]", 1, true),
   "refresh footer order changed"

@@ -38,11 +38,7 @@ function M.snapshot(info)
     entries = entries,
     context = context,
     error = selected_error,
-    detail = selected_error
-      or (
-        selected and ("Selected: " .. selected)
-        or "Choose a build target; [e] edits task-config.json"
-      ),
+    detail = selected_error or (selected and ("Selected: " .. selected) or "Choose a build target"),
   }
 end
 

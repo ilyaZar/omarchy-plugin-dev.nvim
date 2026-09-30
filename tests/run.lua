@@ -227,6 +227,11 @@ assert(
   vim.deep_equal(initialized_data.builds[1].tasks.test.command, { "./scripts/test" }),
   "initial test command changed"
 )
+assert(
+  require("omarchy-plugin-dev.sources").snapshot(assert(project.inspect(root))).detail
+    == "Choose a build target",
+  "source selection hint still duplicates the footer shortcut"
+)
 write(initialized, { config_json({ test = { command = { "custom-test" } } }) })
 local created_again, _, state = project.initialize(root, { validator = accept_validation })
 assert(created_again == nil and state == "exists", "initialization overwrote without approval")
