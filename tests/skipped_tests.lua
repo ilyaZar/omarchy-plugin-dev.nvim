@@ -30,7 +30,7 @@ for _, detected in ipairs({ true, false }) do
   assert(overseer_config.task_list.render == installed, "renderer was wrapped twice")
   local lines = installed(task)
   assert(#base_lines == 1, "warning mutated the user's renderer output")
-  assert(#lines == 4 and lines[1][1][1] == "custom task card", "custom renderer was replaced")
+  assert(#lines == 3 and lines[1][1][1] == "custom task card", "card added duplicate setup text")
   assert(lines[2][1][1] == "  ⚠ WARN: TESTS SKIPPED", "warning lacks glyph or readable fallback")
   assert(lines[2][1][2] == "DiagnosticWarn", "warning does not use theme colors")
   local message = detected and "Tests detected but not configured; skipping"
@@ -38,7 +38,6 @@ for _, detected in ipairs({ true, false }) do
   local hint = detected and "Run :OmaDevInit to configure a test runner"
     or "Add tests and configure them with :OmaDevInit"
   assert(lines[3][1][1] == "    " .. message, "dedicated warning message changed")
-  assert(lines[4][1][1] == "    " .. hint, "dedicated setup hint changed")
   assert(task.status == "SUCCESS", "warning changed pipeline status")
 
   local before = #notices
@@ -69,7 +68,7 @@ for _, detected in ipairs({ true, false }) do
     return installed(value)
   end)
   component:on_start(task)
-  assert(#overseer_config.task_list.render(task) == 4, "renderer delegation duplicated the warning")
+  assert(#overseer_config.task_list.render(task) == 3, "renderer delegation duplicated the warning")
   local replacement = { { { "replacement renderer", "Normal" } } }
   rawset(overseer_config.task_list, "render", function(_task)
     return replacement

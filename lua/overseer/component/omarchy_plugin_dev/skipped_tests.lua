@@ -34,10 +34,9 @@ local function install_renderer()
       end
     end
     lines = vim.deepcopy(lines)
-    local message, hint = warning(state == "detected")
+    local message = warning(state == "detected")
     lines[#lines + 1] = { { "  " .. title, "DiagnosticWarn" } }
     lines[#lines + 1] = { { "    " .. message, "Comment" } }
-    lines[#lines + 1] = { { "    " .. hint, "Comment" } }
     return lines
   end
   task_list.render = renderer
