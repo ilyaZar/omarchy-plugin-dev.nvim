@@ -231,7 +231,27 @@ function M.test_candidates(root)
 end
 
 local function has_test_files(root)
-  for _, directory in ipairs({ "test", "tests", "spec", "specs" }) do
+  local directories = { "test", "tests", "spec", "specs" }
+  local git = vim.fn.exepath("git")
+  if git ~= "" then
+    local command =
+      { git, "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--" }
+    for _, directory in ipairs(directories) do
+      command[#command + 1] = ":(glob)**/" .. directory .. "/**"
+    end
+    local result = vim.system(command, { text = true }):wait(3000)
+    if result.code == 0 then
+      for _, path in
+        ipairs(vim.split(result.stdout or "", "\0", { plain = true, trimempty = true }))
+      do
+        if vim.fn.filereadable(vim.fs.joinpath(root, path)) == 1 then
+          return true
+        end
+      end
+      return false
+    end
+  end
+  for _, directory in ipairs(directories) do
     if #vim.fn.globpath(root, "**/" .. directory, false, true) > 0 then
       return true
     end
@@ -288,7 +308,7 @@ function M.test_state(root)
   end
   return {
     kind = "absent",
-    label = "no conventional tests detected",
+    label = "tests NOT detected",
     tasks_exists = tasks_exists,
   }
 end
