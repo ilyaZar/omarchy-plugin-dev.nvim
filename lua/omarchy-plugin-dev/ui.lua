@@ -92,6 +92,19 @@ local function attach_selection(buf, win, activate)
   end
 end
 
+local function resize(state)
+  local rendered = vim.api.nvim_win_text_height(state.win, {}).all
+  state.height = math.max(state.height or 0, rendered)
+  local height = math.max(1, math.min(state.height, vim.o.lines - 4))
+  vim.api.nvim_win_set_config(state.win, {
+    relative = "editor",
+    height = height,
+    row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
+    col = math.max(0, math.floor((vim.o.columns - state.width) / 2)),
+  })
+  return rendered <= height
+end
+
 local function render(state, reset)
   state.views = dashboard.rows(state.snapshot, state.width)
   local tabs = {}
@@ -122,9 +135,15 @@ local function render(state, reset)
   end
   vim.bo[state.buf].modifiable = false
   if state.select then
+    local fits = resize(state)
     state.select(state.views[state.active_view], reset)
     vim.api.nvim_win_call(state.win, function()
-      vim.fn.winrestview(reset and { topline = 1 } or view)
+      if reset then
+        view = { topline = 1, topfill = 0, skipcol = 0 }
+      elseif fits then
+        view.topline, view.topfill, view.skipcol = 1, 0, 0
+      end
+      vim.fn.winrestview(view)
     end)
   end
 end
@@ -178,7 +197,8 @@ local function open(state)
   for _, rows in ipairs(state.views) do
     height = math.max(height, #rows)
   end
-  height = math.max(1, math.min(height + 3, vim.o.lines - 4))
+  state.height = height + 3
+  height = math.max(1, math.min(state.height, vim.o.lines - 4))
   local win = vim.api.nvim_open_win(state.buf, true, {
     relative = "editor",
     border = "single",
@@ -206,6 +226,7 @@ local function open(state)
   vim.wo[win].linebreak = true
   vim.wo[win].breakindent = true
   vim.wo[win].cursorline = false
+  vim.wo[win].scrolloff = 0
   return win
 end
 
@@ -280,6 +301,7 @@ function M.dashboard(bufnr)
     vim.api.nvim_win_close(dashboard_win, true)
   end
   state.win = open(state)
+  resize(state)
   dashboard_win = state.win
   bind_keys(state)
   return state.buf, state.win

@@ -1374,6 +1374,7 @@ vim.cmd.close()
 
 package.loaded.overseer = original_overseer
 config.setup = base_config_setup
+dofile("tests/dashboard_height.lua")
 dofile("tests/dashboard.lua")
 dofile("tests/dashboard_refresh.lua")
 dofile("tests/manifest_inspection.lua")

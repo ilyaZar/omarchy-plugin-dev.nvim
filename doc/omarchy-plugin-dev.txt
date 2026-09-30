@@ -75,6 +75,8 @@ COMMANDS                                            *omarchy-plugin-dev-commands
 :OmaDev
     Open the project dashboard. Build opens first and contains Actions; Status
     shows project and tool information; Settings contains the build keybindings.
+    The popup grows to fit wrapped content, leaving space above the footer,
+    up to the available editor height. Short editors may still need scrolling.
     Tab / Shift-Tab cycle tabs; 1 / 2 / 3 select them directly. Press r to
     refresh all information and rerun official validation without changing
     tabs. Navigation alone does not rerun checks. Refresh reads saved project
