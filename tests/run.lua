@@ -1374,6 +1374,7 @@ dofile("tests/configuration.lua")
 dofile("tests/initialization.lua")
 dofile("tests/skipped_tests.lua")
 dofile("tests/test_detection.lua")
+dofile("tests/task_layout.lua")
 assert(vim.fn.delete(temp_root, "rf") == 0, "temporary test tree was not removed")
 
 print("omarchy-plugin-dev.nvim tests passed")

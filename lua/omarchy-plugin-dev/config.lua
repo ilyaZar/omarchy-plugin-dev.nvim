@@ -28,6 +28,7 @@ local M = {}
 ---@field log_level? integer
 ---@field qml_file_filter? fun(context: OmarchyPluginDevQmlFileContext): boolean
 ---@field qml_import_paths? string[]
+---@field task_layout? false|{ height?: number, list_width?: number }
 ---@field tasks? table<string, table|fun(context: table): table?>
 
 ---@class OmarchyPluginDevQmlFileContext
@@ -49,6 +50,7 @@ local M = {}
 ---@field log_level integer
 ---@field qml_file_filter? fun(context: OmarchyPluginDevQmlFileContext): boolean
 ---@field qml_import_paths string[]
+---@field task_layout false|{ height: number, list_width: number }
 ---@field tasks table<string, table|fun(context: table): table?>
 
 ---@type OmarchyPluginDevConfig
@@ -81,6 +83,10 @@ local defaults = {
   notify = true,
   log_level = vim.log.levels.INFO,
   qml_import_paths = { "/usr/share/omarchy/shell" },
+  task_layout = {
+    height = 1 / 3,
+    list_width = 1 / 2,
+  },
   tasks = {},
 }
 
@@ -149,6 +155,17 @@ local function validate(opts)
   for index, import_path in ipairs(opts.qml_import_paths) do
     if type(import_path) ~= "string" or import_path == "" then
       error(string.format("omarchy-plugin-dev.nvim: qml_import_paths[%d] must be a string", index))
+    end
+  end
+  if opts.task_layout ~= false then
+    if type(opts.task_layout) ~= "table" then
+      error("omarchy-plugin-dev.nvim: task_layout must be a table or false")
+    end
+    for _, name in ipairs({ "height", "list_width" }) do
+      local value = opts.task_layout[name]
+      if type(value) ~= "number" or not (value > 0 and value < 1) then
+        error("omarchy-plugin-dev.nvim: task_layout." .. name .. " must be between 0 and 1")
+      end
     end
   end
   if type(opts.tasks) ~= "table" then

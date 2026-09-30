@@ -170,6 +170,7 @@ Call setup through a plugin manager's opts or directly. These are the defaults:
     notify = true,
     log_level = vim.log.levels.INFO,
     qml_import_paths = { "/usr/share/omarchy/shell" },
+    task_layout = { height = 1 / 3, list_width = 1 / 2 },
     tasks = {},
   })
 <
@@ -195,6 +196,20 @@ Set mappings to false, mappings.enabled to false, or an individual mapping to
 false to disable defaults. Executable names, QML import paths, notifications,
 and Overseer task definitions are configurable. Setup and commands remain
 available without mappings.
+
+The default initial bottom-panel layout is: >lua
+  task_layout = { height = 1 / 3, list_width = 1 / 2 }
+<
+height is a fraction of available editor height; list_width is the task list's
+share of the two panes' content width. Both must be greater than 0 and less
+than 1; decimals such as 0.15 are accepted. Sizes round to the nearest whole
+row or column and are clamped to fit the editor and keep both panes usable.
+An empty table uses the fractions above; false preserves Overseer's layout.
+
+The layout applies only when a plugin action opens a closed panel. Existing
+panels and manual resizing are left alone; closing and reopening reapplies the
+initial sizes. Overseer's global settings and panels opened directly through
+Overseer are unchanged.
 
 In the dashboard, c or Enter on Plugin settings opens configuration help.
 Set config_file to open your Lua settings file instead: >lua

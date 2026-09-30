@@ -144,6 +144,11 @@ help, add `config_file = "lua/plugins/omarchy-plugin-dev.lua"` to `opts`. Use
 your file's path, relative to Neovim's config directory or absolute. Restart
 Neovim after changing keys.
 
+The task panel opens at one-third height with equal task-list and output panes.
+Change `opts.task_layout.height` or `list_width` to fractions such as `0.15`.
+Sizes apply only on opening; manual resizing is preserved until you close the
+panel. Set `task_layout = false` to keep Overseer's own layout.
+
 For mixed repositories, `qml_file_filter` selects which files receive plugin
 integration. See [the help file][help] or `:help omarchy-plugin-dev` for its
 callback, executable and import-path settings, and task overrides.

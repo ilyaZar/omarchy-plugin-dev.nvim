@@ -50,7 +50,10 @@ local function start(spec)
   end
   local task = backend.new_task(spec)
   task:start()
-  backend.open({ enter = false, focus_task_id = task.id })
+  require("omarchy-plugin-dev.task_layout").open(
+    backend,
+    { enter = false, focus_task_id = task.id }
+  )
   return task
 end
 
@@ -206,7 +209,7 @@ local function open_overseer(root)
       break
     end
   end
-  backend.open({ enter = true, focus_task_id = focused })
+  require("omarchy-plugin-dev.task_layout").open(backend, { enter = true, focus_task_id = focused })
 end
 
 function M.picker(root)
