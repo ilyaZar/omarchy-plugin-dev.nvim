@@ -634,12 +634,40 @@ assert(
 
 local no_test_root = vim.fs.joinpath(temp_root, "plugin without tests")
 create_project(no_test_root)
-local missing_test_build, missing_test_error = task_specs.build(project.canonical(no_test_root))
-assert(missing_test_build == nil, "test-and-build accepted a missing test task")
-assert(
-  missing_test_error and missing_test_error:find("No test task is configured", 1, true),
-  "test-and-build did not explain its missing test task"
-)
+local missing_test_build = assert(task_specs.build(project.canonical(no_test_root)))
+local missing_test_steps = missing_test_build.strategy.tasks
+assert(#missing_test_steps == 4, "build lost its skipped-test step")
+assert(missing_test_steps[1].metadata.omarchy_plugin_dev_action == "check")
+assert(missing_test_steps[2].metadata.omarchy_plugin_dev_action == "test_skipped")
+assert(missing_test_steps[2].cmd[1]:match("/scripts/skip%-project%-test$"))
+assert(missing_test_steps[2].cmd[2] == "absent", "absent tests got the wrong warning")
+assert(missing_test_steps[3].metadata.omarchy_plugin_dev_action == "deploy")
+assert(missing_test_steps[4].metadata.omarchy_plugin_dev_action == "restart")
+local missing_test, _, missing_test_state = task_specs.test(project.canonical(no_test_root))
+assert(missing_test == nil and missing_test_state == "missing", "explicit Test silently skipped")
+assert(project.initialize(no_test_root, { validator = accept_validation }))
+local empty_test_build = assert(task_specs.build(project.canonical(no_test_root)))
+assert(empty_test_build.strategy.tasks[2].cmd[2] == "absent", "empty task config blocked build")
+
+local candidate_root = vim.fs.joinpath(temp_root, "plugin with unconfigured runner")
+create_project(candidate_root)
+local candidate_runner = vim.fs.joinpath(candidate_root, "scripts", "test")
+write(candidate_runner, { "#!/bin/bash", "touch runner-was-executed" })
+make_executable(candidate_runner)
+for _, detected_root in ipairs({ candidate_root, unaggregated_root }) do
+  local detected_build = assert(task_specs.build(project.canonical(detected_root)))
+  local skipped_step = detected_build.strategy.tasks[2]
+  assert(skipped_step.cmd[2] == "detected", "detected tests got the absent-test warning")
+  local result = vim.system(skipped_step.cmd, { cwd = detected_root, text = true }):wait()
+  assert(result.code == 0, "skipped tests stopped the build")
+  assert(result.stdout:find("Tests detected but not configured; skipping", 1, true))
+  assert(vim.fn.filereadable(vim.fs.joinpath(detected_root, "runner-was-executed")) == 0)
+end
+local invalid_tasks_root = vim.fs.joinpath(temp_root, "plugin with invalid tasks")
+create_project(invalid_tasks_root)
+write(project.tasks_path(invalid_tasks_root), { "not json" })
+local invalid_build, invalid_build_error = task_specs.build(project.canonical(invalid_tasks_root))
+assert(invalid_build == nil and invalid_build_error, "build silently skipped invalid task config")
 config.setup({
   tasks = {
     build = { cmd = { "/bin/true" }, name = "Custom build" },
@@ -648,9 +676,11 @@ config.setup({
 local custom_build = assert(task_specs.build(project.canonical(no_test_root)))
 assert(vim.deep_equal(custom_build.cmd, { "/bin/true" }), "custom build override was ignored")
 config.setup({ tasks = { build = { name = "Partial build override" } } })
+local partial_build = assert(task_specs.build(project.canonical(no_test_root)))
+assert(partial_build.name == "Partial build override")
 assert(
-  task_specs.build(project.canonical(no_test_root)) == nil,
-  "partial build override bypassed the required test"
+  partial_build.strategy.tasks[2].metadata.omarchy_plugin_dev_action == "test_skipped",
+  "partial build override lost the skipped-test warning"
 )
 local function_default
 config.setup({
@@ -665,6 +695,15 @@ config.setup({
 local function_build = assert(task_specs.build(project.canonical(root)))
 assert(function_default ~= nil, "build function override lost its default spec")
 assert(function_build.name == "Function build", "build function override was not applied")
+local function_without_test, _, function_preflight =
+  task_specs.build(project.canonical(no_test_root))
+assert(function_without_test, "function build rejected an unconfigured test")
+assert(function_without_test.strategy.tasks[2].cmd[2] == "absent")
+assert(function_preflight == nil, "custom function build lost its prerequisite policy")
+config.setup({ tasks = { test = { cmd = { "/bin/true" } } } })
+local lua_test_build = assert(task_specs.build(project.canonical(no_test_root)))
+assert(lua_test_build.strategy.tasks[2].metadata.omarchy_plugin_dev_action == "test")
+assert(lua_test_build.strategy.tasks[2].cmd[1] == "/bin/true", "configured Lua test was skipped")
 config.setup()
 
 local hot_reload_spec = assert(task_specs.hot_reload(project.canonical(root)))
@@ -809,6 +848,10 @@ assert(
   #notifications == 1 and notifications[1]:find("Test is unavailable", 1, true),
   "build did not explain the unavailable configured test"
 )
+notifications = {}
+config.setup({ executables = { omarchy = "definitely-missing-omarchy" } })
+assert(tasks.build(project.canonical(no_test_root)) == nil, "test skip bypassed build tool checks")
+assert(#notifications == 1 and notifications[1]:find("Check is unavailable", 1, true))
 rawset(vim, "notify", original_notify)
 config.setup()
 

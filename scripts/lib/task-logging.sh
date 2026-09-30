@@ -2,6 +2,7 @@
 
 TASK_LOG_RED=$'\033[0;31m'
 TASK_LOG_GREEN=$'\033[0;32m'
+TASK_LOG_YELLOW=$'\033[0;33m'
 TASK_LOG_BLUE=$'\033[1;34m'
 TASK_LOG_CYAN=$'\033[0;36m'
 TASK_LOG_PURPLE=$'\033[1;35m'
@@ -28,6 +29,11 @@ task_log_context() {
 task_log_command() {
   printf '%b%s%b $ %s\n' "$TASK_LOG_CYAN" "$TASK_LOG_SMALL_ARROW" \
     "$TASK_LOG_NC" "$*" | fold -s -w "$TASK_LOG_WIDTH"
+}
+
+task_log_warn() {
+  printf '%b[WARN]%b %s\n' "$TASK_LOG_YELLOW" "$TASK_LOG_NC" "$*" \
+    | fold -s -w "$TASK_LOG_WIDTH"
 }
 
 task_log_error() {

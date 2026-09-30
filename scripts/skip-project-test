@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/task-logging.sh"
+
+case "${1:-}" in
+  detected)
+    task_log_warn "Tests detected but not configured; skipping"
+    task_log_context "Run :OmaDevInit to configure a test runner"
+    ;;
+  absent)
+    task_log_warn "Tests NOT detected; skipping"
+    task_log_context "Add tests and configure them with :OmaDevInit"
+    ;;
+  *)
+    task_log_error "Expected test detection state: detected or absent"
+    exit 2
+    ;;
+esac

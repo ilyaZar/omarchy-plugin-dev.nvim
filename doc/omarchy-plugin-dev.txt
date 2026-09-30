@@ -99,8 +99,15 @@ COMMANDS                                            *omarchy-plugin-dev-commands
                                                             *:OmaDevBuild*
 :OmaDevBuild
     Check, run the configured test, deploy, then restart the shell exactly
-    once. A missing test task or unavailable test executable stops the
-    default workflow. A complete tasks.build override owns its test policy.
+    once. Without a configured test, a Tests skipped step warns and continues:
+    - Tests detected but not configured; skipping
+    - Tests NOT detected; skipping
+    Both warnings point to :OmaDevInit. Detection never executes a runner.
+    In Git worktrees, test-directory detection considers existing tracked and
+    nonignored files, not ignored reference copies or deleted test sources.
+    A failed test, invalid task configuration, or unavailable configured test
+    executable still stops the default workflow. A complete tasks.build
+    override owns its test policy.
 
                                                              *:OmaDevHealth*
 :OmaDevHealth
@@ -259,7 +266,8 @@ steps: >lua
 A build table with cmd or strategy replaces the complete workflow. A
 build function may also provide a workflow without a configured test.
 These overrides own their check, test, deployment, and restart policy.
-A partial build table, such as a name change, still requires a test task.
+A partial build table, such as a name change, retains the default test policy:
+run configured tests, otherwise warn and skip.
 
 Additional task names appear in the dashboard's picker. Their setup values
 may be full Overseer specs or functions receiving { root, project }. A

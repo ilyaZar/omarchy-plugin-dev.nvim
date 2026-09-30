@@ -82,4 +82,29 @@ if rg -Fq '[OK]' "$test_root/logs.out"; then
   exit 1
 fi
 
+for state in detected absent; do
+  "$plugin_root/scripts/skip-project-test" "$state" >"$test_root/skip-$state.out"
+  rg -Fq '[WARN]' "$test_root/skip-$state.out"
+  rg -Fq ':OmaDevInit' "$test_root/skip-$state.out"
+  if rg -Fq '[OK]' "$test_root/skip-$state.out"; then
+    printf '[error] skipped tests reported a passing test\n' >&2
+    exit 1
+  fi
+done
+rg -Fq 'Tests detected but not configured; skipping' "$test_root/skip-detected.out"
+rg -Fq 'Run :OmaDevInit to configure a test runner' "$test_root/skip-detected.out"
+rg -Fq 'Tests NOT detected; skipping' "$test_root/skip-absent.out"
+rg -Fq 'Add tests and configure them with :OmaDevInit' "$test_root/skip-absent.out"
+if "$plugin_root/scripts/skip-project-test" unknown >"$test_root/skip-invalid.out" 2>&1; then
+  printf '[error] skipped-test helper accepted an unknown state\n' >&2
+  exit 1
+fi
+
+status=0
+"$plugin_root/scripts/run-project-test" /bin/sh -c 'exit 7' \
+  >"$test_root/test-failure.out" 2>&1 || status=$?
+[[ $status == 7 ]]
+rg -Fq '[ERROR]' "$test_root/test-failure.out"
+rg -Fq 'Project test failed' "$test_root/test-failure.out"
+
 printf '[ok] task wrappers\n'

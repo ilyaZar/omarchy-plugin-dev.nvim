@@ -264,6 +264,16 @@ function M.hot_reload(root)
   )
 end
 
+local function skipped_test(root)
+  local state = project.test_state(root)
+  local detected = state.kind == "candidate" or state.kind == "unaggregated"
+  return finalize({
+    name = "Tests skipped (not configured)",
+    cmd = { script_path("skip-project-test"), detected and "detected" or "absent" },
+    components = { "default" },
+  }, root, "test_skipped", "Tests skipped (not configured)")
+end
+
 function M.build(root)
   if is_complete_table_override("build") then
     return finalize(
@@ -282,22 +292,14 @@ function M.build(root)
     return nil, test_error
   end
   if test_state == "missing" then
-    if type(config.get().tasks.build) ~= "function" then
-      return nil,
-        "No test task is configured. Run :OmaDevInit, then edit " .. project.existing_tasks_path(
-          root
-        )
-    end
-  else
-    test_spec = assert(test_spec)
-    steps[#steps + 1] = test_spec
+    test_spec = skipped_test(root)
   end
+  steps[#steps + 1] = assert(test_spec)
   steps[#steps + 1] = deploy(root)
   steps[#steps + 1] = restart(root)
 
   local spec = {
-    name = test_spec and "Omarchy Plugin: test, build, and restart"
-      or "Omarchy Plugin: custom test and build",
+    name = "Omarchy Plugin: test, build, and restart",
     cwd = root,
     strategy = { "orchestrator", tasks = steps },
     components = { "default" },
@@ -309,6 +311,10 @@ function M.build(root)
     "build",
     "Omarchy Plugin: test, build, and restart"
   )
+  -- Keep custom function workflows responsible for their own prerequisites.
+  if test_state == "missing" and type(config.get().tasks.build) == "function" then
+    return finalized
+  end
   return finalized, nil, test_spec
 end
 
