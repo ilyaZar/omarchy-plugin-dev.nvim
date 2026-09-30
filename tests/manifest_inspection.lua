@@ -50,6 +50,12 @@ for _, schema in ipairs({ 2, 42, "1" }) do
   assert(project.validate_root(root) == nil, "unsupported manifest passed validation")
   local buf, win = actions.dashboard(source_buf)
   assert(buf and win, "unsupported schema blocked dashboard inspection")
+  for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+    if mapping.lhs == "2" then
+      mapping.callback()
+      break
+    end
+  end
   local contents = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
   assert(contents:find("unsupported", 1, true), "dashboard did not identify unsupported schema")
   vim.api.nvim_win_close(win, true)

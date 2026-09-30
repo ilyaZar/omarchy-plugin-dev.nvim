@@ -1,93 +1,16 @@
 local M = {}
 
+local dashboard = require("omarchy-plugin-dev.dashboard")
 local dashboard_win
 local namespace = vim.api.nvim_create_namespace("omarchy-plugin-dev.dashboard")
 local selection_namespace = vim.api.nvim_create_namespace("omarchy-plugin-dev.dashboard.selection")
-
-local action_items = {
-  { "h", "Build and restart", "hot_reload", "Check, deploy, then restart the shell" },
-  { "b", "Test, build, restart", "build", "Check, test, deploy, then restart the shell" },
-  { "t", "Test", "test", "Run the configured project test" },
-  { "v", "Health", "health", "Run the plugin's health check" },
-  { "p", "Project tasks", "tasks", "Choose a project task to run" },
-  {
-    "i",
-    "Initialize project",
-    "init_project",
-    "Create task-config.json; confirm before replacing",
-  },
-  { "e", "Edit task configuration", "edit_tasks" },
-  { "c", "Plugin settings", "edit_config" },
-}
-
-local function column(value, width)
-  return value .. string.rep(" ", math.max(width - vim.fn.strdisplaywidth(value), 1))
-end
-
-local function field(label, value, group, detail, action)
-  return {
-    selectable = true,
-    action = action,
-    value = value,
-    { "  " .. column(label .. ":", 22), "Normal" },
-    { value, group or "Normal" },
-    { detail and "  " .. detail or "", "Comment" },
-  }
-end
-
-local function align_details(rows)
-  local width = 0
-  for _, row in ipairs(rows) do
-    if row.value and row[3][1] ~= "" then
-      width = math.max(width, vim.fn.strdisplaywidth(row.value))
-    end
-  end
-  for _, row in ipairs(rows) do
-    if row.value and row[3][1] ~= "" then
-      row[2][1] = column(row.value, width + 2)
-    end
-  end
-end
-
-local function status_group(value)
-  if value == "missing" or value == "failed" or value == "invalid" or value == "unavailable" then
-    return "DiagnosticError"
-  end
-  if
-    value == "available"
-    or value == "running"
-    or value == "passed"
-    or value == "configured"
-    or value == "valid"
-  then
-    return "DiagnosticOk"
-  end
-  return "DiagnosticWarn"
-end
-
-local function executable_row(label, name)
-  local available = vim.fn.executable(name) == 1
-  local state = available and "available" or "missing"
-  local path = available and vim.fn.exepath(name) or name
-  return field(label, state, status_group(state), path ~= "" and path or name)
-end
-
-local function mapping_label(mappings, name)
-  if not mappings or mappings.enabled == false or not mappings[name] then
-    return "disabled"
-  end
-  return mappings[name]:gsub("^<C%-S%-(.)>$", "Ctrl+Shift+%1"):gsub("^<C%-(.)>$", "Ctrl+%1")
-end
 
 local function draw_row(bufnr, line, chunks)
   local parts = {}
   for _, chunk in ipairs(chunks) do
     parts[#parts + 1] = chunk[1]
   end
-  vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, line - 1, line, false, { table.concat(parts) })
-  vim.bo[bufnr].modifiable = false
-  vim.api.nvim_buf_clear_namespace(bufnr, namespace, line - 1, line)
   local col = 0
   for _, chunk in ipairs(chunks) do
     local next_col = col + #chunk[1]
@@ -99,105 +22,6 @@ local function draw_row(bufnr, line, chunks)
     end
     col = next_col
   end
-end
-
-local function dashboard_rows(info, bufnr, width)
-  local config = require("omarchy-plugin-dev.config").get()
-  local project = require("omarchy-plugin-dev.project")
-  local rows = {}
-  local function section(label)
-    if #rows > 0 then
-      rows[#rows + 1] = {}
-    end
-    rows[#rows + 1] = {
-      { "  " .. label .. " ", { "DiagnosticOk", "Bold" } },
-      { string.rep("-", math.max(width - #label - 5, 0)), "Comment" },
-    }
-  end
-  local function add(row)
-    rows[#rows + 1] = row
-  end
-
-  section("Project")
-  add(field("root", info.root))
-  local schema = info.manifest.schemaVersion
-  local recognized = schema == 1
-  local schema_label = type(schema) == "number" and "v" .. tostring(schema) or vim.inspect(schema)
-  local id = type(info.manifest.id) == "string" and info.manifest.id or "missing id"
-  local manifest_row = field(
-    "manifest",
-    recognized and "recognized" or "unsupported",
-    recognized and "DiagnosticOk" or "DiagnosticError",
-    "schema " .. schema_label .. " (" .. id .. ")"
-  )
-  manifest_row[3][2] = recognized and "Comment" or "Normal"
-  add(manifest_row)
-  add(field("official validation", "checking", "DiagnosticWarn"))
-  local validation_line = #rows
-
-  section("Tools")
-  local overseer_available = pcall(require, "overseer")
-  local overseer_state = overseer_available and "available" or "missing"
-  add(field("Overseer", overseer_state, status_group(overseer_state)))
-  local lsp_state, lsp_detail = require("omarchy-plugin-dev.lsp").status(bufnr)
-  add(field("qml-language-server", lsp_state, status_group(lsp_state), lsp_detail))
-  add(executable_row("omarchy", config.executables.omarchy))
-  local lint_state, lint_detail = require("omarchy-plugin-dev.qmllint").status()
-  add(field("qmllint", lint_state, status_group(lint_state), lint_detail))
-  add(executable_row("jq", config.executables.jq))
-  add(executable_row("rsync", config.executables.rsync))
-  local logs = executable_row("logs", config.executables.journalctl)
-  logs[3][1] = logs[3][1] .. " (" .. config.logs.match .. ")"
-  add(logs)
-  local tasks_data, tasks_error, tasks_exists = project.load_tasks(info.root)
-  local tasks_status = tasks_exists and (tasks_data and "valid" or "invalid") or "not initialized"
-  add(field("project tasks", tasks_status, status_group(tasks_status), tasks_error))
-  local test_state = project.test_state(info.root)
-  local test_label, test_detail = test_state.label:match("^(.-) %- (.*)$")
-  add(
-    field("test task", test_label or test_state.label, status_group(test_state.kind), test_detail)
-  )
-  align_details(rows)
-  local overview = rows
-  rows = {}
-
-  section("Actions")
-  local label_width = 0
-  for _, item in ipairs(action_items) do
-    label_width = math.max(label_width, vim.fn.strdisplaywidth(item[2]))
-  end
-  for _, item in ipairs(action_items) do
-    local detail = item[4]
-    if item[3] == "edit_tasks" then
-      detail = "Open .omarchy-plugin-dev/"
-        .. vim.fs.basename(project.existing_tasks_path(info.root))
-    elseif item[3] == "edit_config" then
-      local path = require("omarchy-plugin-dev.config").user_config_path()
-      detail = path and ("Open " .. vim.fs.basename(path)) or "Show configuration help"
-    end
-    add({
-      action = item[3],
-      { "  [" .. item[1] .. "]", "DiagnosticOk" },
-      { " " .. column(item[2], label_width + 3), "Normal" },
-      { detail, "Comment" },
-    })
-  end
-  section("Build keybindings")
-  local hint = config.config_file and "Enter: edit keybindings" or "Enter: settings help"
-  add(
-    field(
-      "hot reload",
-      mapping_label(config.mappings, "hot_reload"),
-      "DiagnosticInfo",
-      hint,
-      "edit_config"
-    )
-  )
-  add(
-    field("build", mapping_label(config.mappings, "build"), "DiagnosticInfo", hint, "edit_config")
-  )
-  align_details(rows)
-  return { overview, rows }, validation_line
 end
 
 local function attach_selection(buf, win, activate)
@@ -257,59 +81,101 @@ local function attach_selection(buf, win, activate)
       select(nearest)
     end,
   })
-  return function(rows, overview)
+  return function(rows, reset)
     items = {}
     for line, row in ipairs(rows) do
-      if row.action or (overview and row.selectable) then
+      if row.action or row.selectable then
         items[#items + 1] = { line = line + 2, action = row.action }
       end
     end
-    select(1)
-  end, function()
-    select(selected)
+    select(reset and 1 or selected)
   end
 end
 
-function M.dashboard(info, bufnr)
-  if dashboard_win and vim.api.nvim_win_is_valid(dashboard_win) then
-    vim.api.nvim_win_close(dashboard_win, true)
-  end
-
-  local width = math.max(1, math.min(100, math.floor(vim.o.columns * 0.84), vim.o.columns - 4))
-  local views, validation_line = dashboard_rows(info, bufnr, width)
-  local active_view = 1
-  local height = math.max(1, math.min(math.max(#views[1], #views[2]) + 3, vim.o.lines - 4))
-  local dashboard_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[dashboard_buf].bufhidden = "wipe"
-  vim.bo[dashboard_buf].filetype = "omarchy-plugin-dev"
-  local function render()
-    local rows = {
-      {
-        { "  [1 Overview]", active_view == 1 and "DiagnosticWarn" or "Comment" },
-        { "  [2 Actions]", active_view == 2 and "DiagnosticWarn" or "Comment" },
-      },
-      {},
+local function render(state, reset)
+  state.views = dashboard.rows(state.snapshot, state.width)
+  local tabs = {}
+  for index, name in ipairs(dashboard.tabs) do
+    tabs[#tabs + 1] = {
+      string.format("  [%d %s]", index, name),
+      state.active_view == index and "DiagnosticWarn" or "Comment",
     }
-    vim.list_extend(rows, views[active_view])
-    rows[#rows + 1] = {}
-    vim.bo[dashboard_buf].modifiable = true
-    vim.api.nvim_buf_clear_namespace(dashboard_buf, namespace, 0, -1)
-    vim.api.nvim_buf_set_lines(
-      dashboard_buf,
-      0,
-      -1,
-      false,
-      vim.tbl_map(function()
-        return ""
-      end, rows)
-    )
-    for line, chunks in ipairs(rows) do
-      draw_row(dashboard_buf, line, chunks)
-    end
   end
-  render()
+  local rows = { tabs, {} }
+  vim.list_extend(rows, state.views[state.active_view])
+  rows[#rows + 1] = {}
+  local view = state.win and vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
+  vim.bo[state.buf].modifiable = true
+  vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
+  vim.api.nvim_buf_set_lines(
+    state.buf,
+    0,
+    -1,
+    false,
+    vim.tbl_map(function()
+      return ""
+    end, rows)
+  )
+  for line, chunks in ipairs(rows) do
+    draw_row(state.buf, line, chunks)
+  end
+  vim.bo[state.buf].modifiable = false
+  if state.select then
+    state.select(state.views[state.active_view], reset)
+    vim.api.nvim_win_call(state.win, function()
+      vim.fn.winrestview(reset and { topline = 1 } or view)
+    end)
+  end
+end
 
-  local win = vim.api.nvim_open_win(dashboard_buf, true, {
+local function close(state)
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_win_close(state.win, true)
+  elseif vim.api.nvim_buf_is_valid(state.buf) then
+    vim.api.nvim_buf_delete(state.buf, { force = true })
+  end
+end
+
+local function refresh(state)
+  state.snapshot = nil
+  local snapshot, inspection_error = dashboard.collect(state.source_buf)
+  if not snapshot then
+    require("omarchy-plugin-dev.messages").show(
+      "Cannot " .. (state.win and "refresh" or "open") .. " dashboard: " .. inspection_error,
+      vim.log.levels.WARN
+    )
+    close(state)
+    return false
+  end
+  state.snapshot = snapshot
+  render(state)
+  require("omarchy-plugin-dev.project").external_validate_async(
+    snapshot.info.root,
+    function(valid, detail)
+      if
+        state.snapshot ~= snapshot
+        or not vim.api.nvim_buf_is_valid(state.buf)
+        or (state.win and not vim.api.nvim_win_is_valid(state.win))
+      then
+        return
+      end
+      snapshot.validation = {
+        state = valid and "passed" or "failed",
+        detail = detail and detail:gsub("\n", " | "),
+      }
+      render(state)
+    end
+  )
+  return true
+end
+
+local function open(state)
+  local height = 0
+  for _, rows in ipairs(state.views) do
+    height = math.max(height, #rows)
+  end
+  height = math.max(1, math.min(height + 3, vim.o.lines - 4))
+  local win = vim.api.nvim_open_win(state.buf, true, {
     relative = "editor",
     border = "single",
     title = { { " Omarchy Plugin Dev ", "FloatTitle" } },
@@ -319,75 +185,89 @@ function M.dashboard(info, bufnr)
       { " move  ", "Comment" },
       { "[Tab]", "DiagnosticOk" },
       { " switch  ", "Comment" },
+      { "[r]", "DiagnosticOk" },
+      { "efresh  ", "Comment" },
       { "[q/Esc]", "DiagnosticOk" },
       { " close ", "Comment" },
     },
     footer_pos = "center",
-    width = width,
+    width = state.width,
     height = height,
     row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
-    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+    col = math.max(0, math.floor((vim.o.columns - state.width) / 2)),
     style = "minimal",
   })
-  dashboard_win = win
   -- Keep full paths and failure details accessible rather than truncating them.
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
   vim.wo[win].breakindent = true
   vim.wo[win].cursorline = false
+  return win
+end
 
-  local function close()
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
+local function bind_keys(state)
+  local function map(lhs, callback, desc)
+    vim.keymap.set("n", lhs, callback, {
+      buffer = state.buf,
+      desc = "Omarchy Plugin: " .. desc,
+      silent = true,
+    })
   end
-  for _, lhs in ipairs({ "q", "<Esc>" }) do
-    vim.keymap.set(
-      "n",
-      lhs,
-      close,
-      { buffer = dashboard_buf, desc = "Close Omarchy Plugin window" }
-    )
-  end
-  local actions = require("omarchy-plugin-dev.actions")
   local function activate(method)
-    close()
-    actions[method](bufnr)
+    close(state)
+    require("omarchy-plugin-dev.actions")[method](state.source_buf)
   end
-  local reset_selection, refresh_selection = attach_selection(dashboard_buf, win, activate)
-  reset_selection(views[active_view], active_view == 1)
-  for _, lhs in ipairs({ "<Tab>", "<S-Tab>", "1", "2" }) do
-    vim.keymap.set("n", lhs, function()
-      active_view = tonumber(lhs) or (3 - active_view)
-      render()
-      reset_selection(views[active_view], active_view == 1)
-      vim.api.nvim_win_call(win, function()
-        vim.fn.winrestview({ topline = 1 })
-      end)
-    end, { buffer = dashboard_buf, desc = "Omarchy Plugin: switch dashboard tab", silent = true })
+  state.select = attach_selection(state.buf, state.win, activate)
+  state.select(state.views[state.active_view], true)
+  for _, lhs in ipairs({ "q", "<Esc>" }) do
+    map(lhs, function()
+      close(state)
+    end, "close dashboard")
   end
-  for _, item in ipairs(action_items) do
-    vim.keymap.set("n", item[1], function()
+  map("r", function()
+    refresh(state)
+  end, "refresh dashboard")
+  local function switch(index)
+    state.active_view = (index - 1) % #dashboard.tabs + 1
+    render(state, true)
+  end
+  map("<Tab>", function()
+    switch(state.active_view + 1)
+  end, "next dashboard tab")
+  map("<S-Tab>", function()
+    switch(state.active_view - 1)
+  end, "previous dashboard tab")
+  for index in ipairs(dashboard.tabs) do
+    map(tostring(index), function()
+      switch(index)
+    end, "switch dashboard tab")
+  end
+  for _, item in ipairs(dashboard.actions) do
+    map(item[1], function()
       activate(item[3])
-    end, { buffer = dashboard_buf, desc = "Omarchy Plugin: " .. item[2], silent = true })
+    end, item[2])
   end
+end
 
-  require("omarchy-plugin-dev.project").external_validate_async(info.root, function(valid, detail)
-    if not vim.api.nvim_buf_is_valid(dashboard_buf) then
-      return
-    end
-    local state = valid and "passed" or "failed"
-    views[1][validation_line] =
-      field("official validation", state, status_group(state), detail and detail:gsub("\n", " | "))
-    align_details(views[1])
-    if active_view == 1 then
-      for line, row in ipairs(views[1]) do
-        draw_row(dashboard_buf, line + 2, row)
-      end
-      refresh_selection()
-    end
-  end)
-  return dashboard_buf, win
+function M.dashboard(bufnr)
+  local state = {
+    source_buf = bufnr and bufnr ~= 0 and bufnr or vim.api.nvim_get_current_buf(),
+    width = math.max(1, math.min(100, math.floor(vim.o.columns * 0.84), vim.o.columns - 4)),
+    active_view = 1,
+    buf = vim.api.nvim_create_buf(false, true),
+  }
+  vim.bo[state.buf].bufhidden = "wipe"
+  vim.bo[state.buf].filetype = "omarchy-plugin-dev"
+  if not refresh(state) then
+    return
+  end
+  if dashboard_win and vim.api.nvim_win_is_valid(dashboard_win) then
+    vim.api.nvim_win_close(dashboard_win, true)
+  end
+  state.win = open(state)
+  dashboard_win = state.win
+  bind_keys(state)
+  return state.buf, state.win
 end
 
 return M

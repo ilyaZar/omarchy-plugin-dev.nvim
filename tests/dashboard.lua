@@ -6,6 +6,7 @@ local saved_config = vim.deepcopy(config.get())
 local saved_actions = package.loaded["omarchy-plugin-dev.actions"]
 local saved_validate = project.external_validate_async
 local saved_test_state = project.test_state
+local saved_inspect = project.inspect
 local lsp = require("omarchy-plugin-dev.lsp")
 local saved_lsp_status = lsp.status
 local columns, lines = vim.o.columns, vim.o.lines
@@ -35,10 +36,20 @@ project.external_validate_async = function(_, callback)
   pending[#pending + 1] = callback
 end
 project.test_state = function()
-  return { kind = "configured", label = "configured - true" }
+  return { kind = "configured", label = "configured - true", tasks_exists = true }
+end
+project.inspect = function(bufnr)
+  assert(bufnr == source_buf, "inspection lost the source buffer")
+  return vim.deepcopy(info)
 end
 lsp.status = function()
   return "running", "running as client 2"
+end
+
+local function open_dashboard()
+  local buf, win = ui.dashboard(source_buf)
+  assert(buf and win, "could not open dashboard fixture")
+  return buf, win
 end
 
 local function key(bufnr, lhs)
@@ -55,7 +66,7 @@ config.setup({
   mappings = { hot_reload = "<F5>", build = false },
   logs = { match = "_COMM=custom" },
 })
-local buf, win = ui.dashboard(info, source_buf)
+local buf, win = open_dashboard()
 local function text(bufnr)
   return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 end
@@ -107,14 +118,19 @@ local function check_manifest_style(bufnr, state, status_group, detail_group)
   error("manifest row is missing")
 end
 local contents = text(buf)
+assert(contents:find("[1 Build]  [2 Status]  [3 Settings]", 1, true), "dashboard tabs changed")
+assert(contents:find("  Actions ", 1, true), "Build is not the initial tab")
+assert(selected_text(buf, win):find("[h]", 1, true), "Build did not select its first action")
+key(buf, "2")()
+contents = text(buf)
 check_layout(buf)
 check_manifest_style(buf, "recognized", "DiagnosticOk", "Comment")
 assert(contents:find("schema v1 (dev.dashboard)", 1, true), "schema detail was lost")
 assert(contents:find("running as client 2", 1, true), "LSP detail was lost")
 assert(contents:match("configured%s+true"), "test command detail was lost")
-assert(selected_text(buf, win):find("root:", 1, true), "overview did not select its first row")
+assert(selected_text(buf, win):find("root:", 1, true), "status did not select its first row")
 key(buf, "<CR>")()
-assert(#calls == 0 and vim.api.nvim_win_is_valid(win), "overview Enter executed an action")
+assert(#calls == 0 and vim.api.nvim_win_is_valid(win), "status Enter executed an action")
 key(buf, "j")()
 assert(selected_text(buf, win):find("manifest:", 1, true), "j did not select the next field")
 key(buf, "<Down>")()
@@ -134,13 +150,10 @@ assert(selected_text(buf, win):find("root:", 1, true), "cursor escaped to a head
 vim.api.nvim_win_set_cursor(win, { vim.api.nvim_win_get_cursor(win)[1], 5 })
 vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
 assert(vim.api.nvim_win_get_cursor(win)[2] == 0, "horizontal movement was not constrained")
-assert(
-  contents:find("Project", 1, true) < contents:find("Tools", 1, true),
-  "overview order changed"
-)
-assert(not contents:find("[h]", 1, true), "overview includes action rows")
+assert(contents:find("Project", 1, true) < contents:find("Tools", 1, true), "status order changed")
+assert(not contents:find("[h]", 1, true), "status includes action rows")
 assert(contents:find("_COMM=custom", 1, true), "dashboard ignores journal match")
-key(buf, "<Tab>")()
+key(buf, "1")()
 check_layout(buf)
 contents = text(buf)
 assert(
@@ -149,15 +162,25 @@ assert(
 )
 assert(contents:find("confirm before replacing", 1, true), "initialization explanation is missing")
 assert(contents:find("Show configuration help", 1, true), "settings help fallback is missing")
-assert(
-  contents:find("  Actions ", 1, true) < contents:find("Build keybindings", 1, true),
-  "actions order changed"
-)
-assert(not contents:find("_COMM=custom", 1, true), "actions includes tool rows")
-assert(contents:find("<F5>", 1, true), "dashboard lost configured mapping")
-assert(contents:find("disabled", 1, true), "dashboard hides disabled mapping")
+assert(contents:find("  Actions ", 1, true), "build lost the Actions section")
+assert(not contents:find("Build keybindings", 1, true), "build still includes settings")
+assert(not contents:find("_COMM=custom", 1, true), "build includes tool rows")
 assert(contents:find("Run the plugin's health check", 1, true), "health description is unclear")
-assert(selected_text(buf, win):find("[h]", 1, true), "actions did not select its first row")
+assert(selected_text(buf, win):find("[h]", 1, true), "build did not select its first row")
+key(buf, "G")()
+assert(selected_text(buf, win):find("[c]", 1, true), "build did not select its last action")
+key(buf, "j")()
+assert(selected_text(buf, win):find("[c]", 1, true), "build selection escaped its rows")
+key(buf, "3")()
+check_layout(buf)
+assert(text(buf):find("Build keybindings", 1, true), "3 did not select settings")
+assert(not text(buf):find("[h]", 1, true), "settings includes action rows")
+assert(text(buf):find("<F5>", 1, true), "dashboard lost configured mapping")
+assert(text(buf):find("disabled", 1, true), "dashboard hides disabled mapping")
+assert(
+  selected_text(buf, win):find("hot reload:", 1, true),
+  "settings did not select its first row"
+)
 key(buf, "G")()
 assert(selected_text(buf, win):find("build:", 1, true), "G did not select the last keybinding")
 assert(selected_text(buf, win):find("Enter: settings help", 1, true), "build row has no edit hint")
@@ -170,10 +193,15 @@ assert(
   "hot reload row has no edit hint"
 )
 key(buf, "k")()
-assert(
-  selected_text(buf, win):find("[c]", 1, true),
-  "navigation did not skip the keybindings heading"
-)
+assert(selected_text(buf, win):find("hot reload:", 1, true), "selection moved into the heading")
+key(buf, "<Tab>")()
+assert(selected_text(buf, win):find("[h]", 1, true), "Tab did not wrap to Build")
+key(buf, "<S-Tab>")()
+assert(selected_text(buf, win):find("hot reload:", 1, true), "Shift-Tab did not wrap to Settings")
+key(buf, "<S-Tab>")()
+assert(selected_text(buf, win):find("root:", 1, true), "Shift-Tab did not select Status")
+key(buf, "1")()
+assert(text(buf) == contents, "1 did not restore Build")
 key(buf, "gg")()
 key(buf, "k")()
 assert(selected_text(buf, win):find("[h]", 1, true), "selection moved before the first row")
@@ -183,30 +211,40 @@ end
 local selection_ns = vim.api.nvim_get_namespaces()["omarchy-plugin-dev.dashboard.selection"]
 local marks = vim.api.nvim_buf_get_extmarks(buf, selection_ns, 0, -1, { details = true })
 assert(#marks == 1 and marks[1][4].line_hl_group == "Visual", "selected row is not highlighted")
-assert(vim.api.nvim_win_get_config(win).footer, "dashboard footer is missing")
+local footer = vim.api.nvim_win_get_config(win).footer
+assert(footer, "dashboard footer is missing")
+local footer_text = table.concat(vim.tbl_map(function(chunk)
+  return chunk[1]
+end, footer))
+assert(
+  footer_text:find("[Tab] switch  [r]efresh  [q/Esc]", 1, true),
+  "refresh footer order changed"
+)
 assert(not vim.bo[buf].modifiable, "dashboard is editable")
 assert(vim.wo[win].wrap, "dashboard truncates full paths and errors")
 local ns = vim.api.nvim_get_namespaces()["omarchy-plugin-dev.dashboard"]
 assert(#vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}) > 0, "dashboard has no highlighting")
 pending[#pending](false, "validation failed\nexample detail")
 assert(text(buf) == contents, "background validation corrupted the actions tab")
-key(buf, "<S-Tab>")()
+key(buf, "2")()
 contents = text(buf)
 check_layout(buf)
 assert(contents:find("validation failed | example detail", 1, true), "validation detail was lost")
-key(buf, "2")()
-assert(text(buf):find("[h]", 1, true), "2 did not select actions")
 key(buf, "1")()
-assert(text(buf) == contents, "1 did not restore overview")
+assert(text(buf):find("[h]", 1, true), "1 did not select Build")
+key(buf, "3")()
+assert(text(buf):find("Build keybindings", 1, true), "3 did not select settings")
+key(buf, "2")()
+assert(text(buf) == contents, "2 did not restore Status")
 assert(#pending == 1, "switching tabs reran validation")
 key(buf, "q")()
 assert(not vim.api.nvim_win_is_valid(win), "q did not close dashboard")
 
 vim.o.columns, vim.o.lines = 60, 20
 config.setup({ mappings = false })
-for _, tab in ipairs({ "1", "2" }) do
+for _, tab in ipairs({ "1", "2", "3" }) do
   for lhs, method in pairs(expected) do
-    local action_buf, action_win = ui.dashboard(info, source_buf)
+    local action_buf, action_win = open_dashboard()
     key(action_buf, tab)()
     assert(vim.api.nvim_win_get_width(action_win) <= 56, "dashboard exceeds narrow editor")
     for _, line in ipairs(vim.api.nvim_buf_get_lines(action_buf, 0, -1, false)) do
@@ -231,9 +269,10 @@ for index, method in ipairs({
   "edit_config",
   "edit_config",
 }) do
-  local action_buf, action_win = ui.dashboard(info, source_buf)
-  key(action_buf, "2")()
-  for _ = 2, index do
+  local action_buf, action_win = open_dashboard()
+  key(action_buf, index > 8 and "3" or "1")()
+  local row = index > 8 and index - 8 or index
+  for _ = 2, row do
     key(action_buf, "j")()
   end
   key(action_buf, "<CR>")()
@@ -242,12 +281,13 @@ for index, method in ipairs({
 end
 
 config.setup({ config_file = "lua/my settings.lua" })
-local settings_buf = ui.dashboard(info, source_buf)
-key(settings_buf, "2")()
+local settings_buf = open_dashboard()
+key(settings_buf, "1")()
 assert(
   text(settings_buf):find("Open my settings.lua", 1, true),
   "settings file explanation is missing"
 )
+key(settings_buf, "3")()
 local hint_count = 0
 for _, line in ipairs(vim.api.nvim_buf_get_lines(settings_buf, 0, -1, false)) do
   if line:find("Enter: edit keybindings", 1, true) then
@@ -260,9 +300,9 @@ key(settings_buf, "G")()
 key(settings_buf, "<CR>")()
 assert(calls[#calls][1] == "edit_config", "build row Enter did not open settings")
 
-local old_buf = ui.dashboard(info, source_buf)
+local old_buf = open_dashboard()
 local late_validation = pending[#pending]
-local new_buf, new_win = ui.dashboard(info, source_buf)
+local new_buf, new_win = open_dashboard()
 assert(not vim.api.nvim_buf_is_valid(old_buf), "reopening retained old dashboard")
 late_validation(false, "stale result")
 contents = table.concat(vim.api.nvim_buf_get_lines(new_buf, 0, -1, false), "\n")
@@ -272,7 +312,8 @@ assert(not vim.api.nvim_win_is_valid(new_win), "escape did not close dashboard")
 
 for _, schema in ipairs({ 2, 42, "1", false }) do
   info.manifest.schemaVersion = schema
-  local unsupported_buf, unsupported_win = ui.dashboard(info, source_buf)
+  local unsupported_buf, unsupported_win = open_dashboard()
+  key(unsupported_buf, "2")()
   check_manifest_style(unsupported_buf, "unsupported", "DiagnosticError", "Normal")
   pending[#pending](false, "unsupported schema")
   check_manifest_style(unsupported_buf, "unsupported", "DiagnosticError", "Normal")
@@ -282,6 +323,7 @@ end
 vim.o.columns, vim.o.lines = columns, lines
 project.external_validate_async = saved_validate
 project.test_state = saved_test_state
+project.inspect = saved_inspect
 lsp.status = saved_lsp_status
 package.loaded["omarchy-plugin-dev.actions"] = saved_actions
 ---@diagnostic disable-next-line: param-type-mismatch

@@ -1316,6 +1316,12 @@ vim.cmd.buffer(project_buf)
 vim.cmd.OmaDev()
 assert(vim.bo.filetype == "omarchy-plugin-dev", "dashboard did not open")
 local dashboard_buf = vim.api.nvim_get_current_buf()
+for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(dashboard_buf, "n")) do
+  if mapping.lhs == "2" then
+    mapping.callback()
+    break
+  end
+end
 local function dashboard_text()
   return table.concat(vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false), "\n"):gsub(" +", " ")
 end
@@ -1369,6 +1375,7 @@ vim.cmd.close()
 package.loaded.overseer = original_overseer
 config.setup = base_config_setup
 dofile("tests/dashboard.lua")
+dofile("tests/dashboard_refresh.lua")
 dofile("tests/manifest_inspection.lua")
 dofile("tests/configuration.lua")
 dofile("tests/initialization.lua")

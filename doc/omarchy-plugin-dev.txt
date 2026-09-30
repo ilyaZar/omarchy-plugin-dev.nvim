@@ -84,7 +84,14 @@ COMMANDS                                            *omarchy-plugin-dev-commands
 
                                                                    *:OmaDev*
 :OmaDev
-    Open the project dashboard.
+    Open the project dashboard. Build opens first and contains Actions; Status
+    shows project and tool information; Settings contains the build keybindings.
+    Tab / Shift-Tab cycle tabs; 1 / 2 / 3 select them directly. Press r to
+    refresh all information and rerun official validation without changing
+    tabs. Navigation alone does not rerun checks. Refresh reads saved project
+    files and current plugin options; it does not source configuration files.
+    If the source project can no longer be inspected, the dashboard closes
+    with an explanation rather than displaying stale information.
 
                                                                *:OmaDevTest*
 :OmaDevTest

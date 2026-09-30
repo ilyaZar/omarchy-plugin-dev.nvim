@@ -76,8 +76,9 @@ the [task configuration example][help] or
 Legacy `tasks.json` files remain readable; see the initialization help for
 replacement with `:OmaDevInit!`.
 
-Open `:OmaDev` for project and tool status. Press `p` for built-in tasks, custom
-tasks, or **Shell logs**. Run `:OmaDevHealth` to diagnose missing tools.
+Open `:OmaDev` for **Build**, **Status**, and **Settings**. Press `r` to refresh
+project/tool information and rerun validation, or `p` to choose built-in tasks,
+custom tasks, or **Shell logs**. Run `:OmaDevHealth` to diagnose missing tools.
 
 ## Commands and mappings
 

@@ -102,6 +102,8 @@ function M.executable()
 end
 
 function M.status()
+  -- Status checks must notice tools replaced during an editor session.
+  version_cache = {}
   local info, resolve_error = M.resolve()
   if not info then
     return "missing", resolve_error

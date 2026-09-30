@@ -13,19 +13,7 @@ local function current(bufnr)
 end
 
 function M.dashboard(bufnr)
-  bufnr = bufnr or 0
-  if bufnr == 0 then
-    bufnr = vim.api.nvim_get_current_buf()
-  end
-  local info, inspection_error = require("omarchy-plugin-dev.project").inspect(bufnr)
-  if not info then
-    require("omarchy-plugin-dev.messages").show(
-      "Cannot open dashboard: " .. inspection_error,
-      vim.log.levels.WARN
-    )
-    return
-  end
-  return require("omarchy-plugin-dev.ui").dashboard(info, bufnr)
+  return require("omarchy-plugin-dev.ui").dashboard(bufnr)
 end
 
 function M.test(bufnr)
