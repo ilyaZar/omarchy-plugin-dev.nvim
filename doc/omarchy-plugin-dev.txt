@@ -109,6 +109,14 @@ COMMANDS                                            *omarchy-plugin-dev-commands
     executable still stops the default workflow. A complete tasks.build
     override owns its test policy.
 
+    A skipped-test card keeps SUCCESS so the build can continue, but adds a
+    "⚠ WARN: TESTS SKIPPED" heading in DiagnosticWarn, the dedicated warning
+    message, and its setup hint. The plugin wraps the existing Overseer
+    renderer only to decorate its successful skipped-test cards; other cards
+    are unchanged. A warning notification replaces the skipped step's usual
+    success notification. Set notify=false to suppress the plugin notification;
+    the card warning remains visible.
+
                                                              *:OmaDevHealth*
 :OmaDevHealth
     Run the standard `checkhealth omarchy-plugin-dev` report.

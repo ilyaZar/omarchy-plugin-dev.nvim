@@ -641,6 +641,15 @@ assert(missing_test_steps[1].metadata.omarchy_plugin_dev_action == "check")
 assert(missing_test_steps[2].metadata.omarchy_plugin_dev_action == "test_skipped")
 assert(missing_test_steps[2].cmd[1]:match("/scripts/skip%-project%-test$"))
 assert(missing_test_steps[2].cmd[2] == "absent", "absent tests got the wrong warning")
+assert(missing_test_steps[2].components[1][1] == "omarchy_plugin_dev.skipped_tests")
+assert(missing_test_steps[2].components[1].detected == false)
+assert(
+  vim.deep_equal(missing_test_steps[2].components[2], {
+    "on_complete_notify",
+    statuses = { "FAILURE" },
+  }),
+  "skipped tests still emit a success notification"
+)
 assert(missing_test_steps[3].metadata.omarchy_plugin_dev_action == "deploy")
 assert(missing_test_steps[4].metadata.omarchy_plugin_dev_action == "restart")
 local missing_test, _, missing_test_state = task_specs.test(project.canonical(no_test_root))
@@ -658,6 +667,7 @@ for _, detected_root in ipairs({ candidate_root, unaggregated_root }) do
   local detected_build = assert(task_specs.build(project.canonical(detected_root)))
   local skipped_step = detected_build.strategy.tasks[2]
   assert(skipped_step.cmd[2] == "detected", "detected tests got the absent-test warning")
+  assert(skipped_step.components[1].detected == true)
   local result = vim.system(skipped_step.cmd, { cwd = detected_root, text = true }):wait()
   assert(result.code == 0, "skipped tests stopped the build")
   assert(result.stdout:find("Tests detected but not configured; skipping", 1, true))
@@ -1362,6 +1372,7 @@ dofile("tests/dashboard.lua")
 dofile("tests/manifest_inspection.lua")
 dofile("tests/configuration.lua")
 dofile("tests/initialization.lua")
+dofile("tests/skipped_tests.lua")
 dofile("tests/test_detection.lua")
 assert(vim.fn.delete(temp_root, "rf") == 0, "temporary test tree was not removed")
 

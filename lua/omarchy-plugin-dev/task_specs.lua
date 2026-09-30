@@ -270,7 +270,11 @@ local function skipped_test(root)
   return finalize({
     name = "Tests skipped (not configured)",
     cmd = { script_path("skip-project-test"), detected and "detected" or "absent" },
-    components = { "default" },
+    components = {
+      { "omarchy_plugin_dev.skipped_tests", detected = detected },
+      { "on_complete_notify", statuses = { "FAILURE" } },
+      "default",
+    },
   }, root, "test_skipped", "Tests skipped (not configured)")
 end
 
