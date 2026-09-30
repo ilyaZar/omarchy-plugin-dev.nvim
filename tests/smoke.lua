@@ -169,13 +169,13 @@ local initialized_tasks =
   assert(project.load_tasks(init_root), "initialized task-config.json is invalid")
 local candidates = project.test_candidates(init_root)
 if #candidates > 0 then
-  assert(initialized_tasks.tasks.test, "detected test runner was not configured")
+  assert(initialized_tasks.builds[1].tasks.test, "detected test runner was not configured")
   assert(
-    vim.deep_equal(initialized_tasks.tasks.test.command, candidates[1].command),
+    vim.deep_equal(initialized_tasks.builds[1].tasks.test.command, candidates[1].command),
     "initialization selected the wrong test runner"
   )
 else
-  assert(initialized_tasks.tasks.test == nil, "initialization invented a test runner")
+  assert(initialized_tasks.builds[1].tasks.test == nil, "initialization invented a test runner")
 end
 
 print("repo-managed Neovim smoke checks passed")

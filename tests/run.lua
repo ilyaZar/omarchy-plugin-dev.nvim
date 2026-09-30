@@ -155,32 +155,49 @@ write(vim.fs.joinpath(package_root, "manifest.json"), { '{"name":"not an Omarchy
 write(vim.fs.joinpath(package_root, "View.qml"), { "Item {}" })
 assert(project.detect(package_root) == nil, "unrelated manifest was accepted")
 
+local function config_json(definitions)
+  return vim.json.encode({
+    version = 2,
+    builds = {
+      {
+        name = "Local",
+        type = "local-source",
+        source = ".",
+        destination = ".",
+        tasks = definitions,
+      },
+    },
+  })
+end
+local function definitions(path)
+  return assert(project.load_tasks(path)).builds[1].tasks
+end
 local parsed = assert(
   project.decode_tasks(
-    '{"version":1,"tasks":{"test":{"command":["./scripts/test","--unit"]}}}',
+    config_json({ test = { command = { "./scripts/test", "--unit" } } }),
     "memory"
   )
 )
-assert(parsed.tasks.test.command[2] == "--unit", "task argv parsing changed")
+assert(parsed.builds[1].tasks.test.command[2] == "--unit", "task argv parsing changed")
 assert(project.decode_tasks("{", "memory") == nil, "malformed JSON was accepted")
 assert(
-  project.decode_tasks('{"version":1,"tasks":{"test":{"command":"make test"}}}', "memory") == nil,
+  project.decode_tasks(config_json({ test = { command = "make test" } }), "memory") == nil,
   "shell-string command was accepted"
 )
 assert(
-  project.decode_tasks('{"version":2,"tasks":{}}', "memory") == nil,
-  "unsupported tasks schema was accepted"
+  project.decode_tasks('{"version":1,"tasks":{}}', "memory") == nil,
+  "old task schema was accepted"
 )
 assert(
-  project.decode_tasks('{"version":1,"tasks":{"reload":{"command":["custom-reload"]}}}', "memory"),
-  "released custom task name was rejected"
+  project.decode_tasks(config_json({ reload = { command = { "custom-reload" } } }), "memory"),
+  "custom task was rejected"
 )
 assert(
   project.decode_tasks(
-    '{"version":1,"tasks":{"check_reload":{"command":["custom-workflow"]}}}',
+    config_json({ check_reload = { command = { "custom-workflow" } } }),
     "memory"
   ),
-  "available custom task name was rejected"
+  "custom task was rejected"
 )
 
 local test_candidates = project.test_candidates(root)
@@ -189,7 +206,7 @@ assert(
   vim.deep_equal(test_candidates[1].command, { "./scripts/test" }),
   "detected test runner command changed"
 )
-assert(project.test_state(root).kind == "candidate", "unconfigured test runner state is wrong")
+assert(project.test_state(root, {}).kind == "candidate", "unconfigured test runner state is wrong")
 
 local initialized = assert(project.initialize(root, {
   test_command = test_candidates[1].command,
@@ -207,14 +224,17 @@ assert(
 )
 local initialized_data = assert(project.load_tasks(root))
 assert(
-  vim.deep_equal(initialized_data.tasks.test.command, { "./scripts/test" }),
+  vim.deep_equal(initialized_data.builds[1].tasks.test.command, { "./scripts/test" }),
   "initial test command changed"
 )
-write(initialized, { '{"version":1,"tasks":{"test":{"command":["custom-test"]}}}' })
+write(initialized, { config_json({ test = { command = { "custom-test" } } }) })
 local created_again, _, state = project.initialize(root, { validator = accept_validation })
 assert(created_again == nil and state == "exists", "initialization overwrote without approval")
 local preserved = assert(project.load_tasks(root))
-assert(preserved.tasks.test.command[1] == "custom-test", "existing task configuration was modified")
+assert(
+  preserved.builds[1].tasks.test.command[1] == "custom-test",
+  "existing task configuration was modified"
+)
 assert(
   project.initialize(root, {
     force = true,
@@ -231,37 +251,26 @@ for _, line in ipairs(vim.fn.readfile(gitignore_path)) do
 end
 assert(ignore_count == 1, "initialization duplicated the .gitignore entry")
 assert(vim.fn.filereadable(vim.fs.joinpath(root, ".qmlls.ini")) == 0, "dead LSP config was created")
-assert(project.test_state(root).kind == "configured", "configured test runner state is wrong")
+assert(
+  project.test_state(root, definitions(root)).kind == "configured",
+  "configured test runner state is wrong"
+)
 
-local legacy_root = vim.fs.joinpath(temp_root, "plugin with legacy task config")
-create_project(legacy_root)
-local legacy_path = vim.fs.joinpath(legacy_root, ".omarchy-plugin-dev", "tasks.json")
-write(legacy_path, { '{"version":1,"tasks":{"test":{"command":["legacy-test"]}}}' })
-assert(
-  project.existing_tasks_path(legacy_root) == legacy_path,
-  "legacy task configuration was not discovered"
+local obsolete_root = vim.fs.joinpath(temp_root, "plugin with obsolete task config")
+create_project(obsolete_root)
+write(
+  vim.fs.joinpath(obsolete_root, ".omarchy-plugin-dev", "tasks.json"),
+  { '{"version":1,"tasks":{}}' }
 )
-local legacy_data = assert(project.load_tasks(legacy_root))
-assert(legacy_data.tasks.test.command[1] == "legacy-test", "legacy task configuration changed")
-local legacy_reinit, _, legacy_state = project.initialize(legacy_root, {
-  validator = accept_validation,
-})
-assert(legacy_reinit == nil and legacy_state == "exists", "legacy configuration was overwritten")
-local migrated_path = assert(project.initialize(legacy_root, {
-  force = true,
-  validator = accept_validation,
-}))
-assert(
-  migrated_path == project.tasks_path(legacy_root) and vim.fn.filereadable(migrated_path) == 1,
-  "explicit overwrite did not use task-config.json"
-)
-assert(vim.fn.filereadable(legacy_path) == 0, "explicit overwrite retained legacy tasks.json")
+assert(project.load_tasks(obsolete_root) == nil, "obsolete filename became a fallback")
+assert(project.initialize(obsolete_root, { validator = accept_validation }))
+assert(project.load_tasks(obsolete_root).version == 2, "initialization did not use version 2")
 
 local unaggregated_root = vim.fs.joinpath(temp_root, "plugin with unaggregated tests")
 create_project(unaggregated_root)
 write(vim.fs.joinpath(unaggregated_root, "tests", "test_service.sh"), { "#!/bin/bash" })
 assert(
-  project.test_state(unaggregated_root).kind == "unaggregated",
+  project.test_state(unaggregated_root, {}).kind == "unaggregated",
   "unaggregated tests were not distinguished from an aggregate runner"
 )
 assert(
@@ -269,7 +278,7 @@ assert(
   "initialization without a test runner failed"
 )
 local unaggregated_data = assert(project.load_tasks(unaggregated_root))
-assert(unaggregated_data.tasks.test == nil, "initialization invented a test command")
+assert(unaggregated_data.builds[1].tasks.test == nil, "initialization invented a test command")
 
 config.setup({ executables = { omarchy = "/bin/false" } })
 local async_validation_done = false
@@ -612,7 +621,7 @@ assert(
 assert(lint_step.cwd == project.canonical(root), "lint task cwd is wrong")
 config.setup()
 
-local test_spec = assert(task_specs.test(project.canonical(root)))
+local test_spec = assert(task_specs.test(project.canonical(root), definitions(root)))
 assert(
   test_spec.cmd[1]:match("/scripts/run%-project%-test$") and test_spec.cmd[2] == "./scripts/test",
   "project test task does not use its output wrapper"
@@ -634,9 +643,9 @@ assert(
 
 local no_test_root = vim.fs.joinpath(temp_root, "plugin without tests")
 create_project(no_test_root)
-local missing_test_build = assert(task_specs.build(project.canonical(no_test_root)))
+local missing_test_build = assert(task_specs.build(project.canonical(no_test_root), {}))
 local missing_test_steps = missing_test_build.strategy.tasks
-assert(#missing_test_steps == 4, "build lost its skipped-test step")
+assert(#missing_test_steps == 3, "build lost its skipped-test step")
 assert(missing_test_steps[1].metadata.omarchy_plugin_dev_action == "check")
 assert(missing_test_steps[2].metadata.omarchy_plugin_dev_action == "test_skipped")
 assert(missing_test_steps[2].cmd[1]:match("/scripts/skip%-project%-test$"))
@@ -650,12 +659,12 @@ assert(
   }),
   "skipped tests still emit a success notification"
 )
-assert(missing_test_steps[3].metadata.omarchy_plugin_dev_action == "deploy")
-assert(missing_test_steps[4].metadata.omarchy_plugin_dev_action == "restart")
-local missing_test, _, missing_test_state = task_specs.test(project.canonical(no_test_root))
+assert(missing_test_steps[3].metadata.omarchy_plugin_dev_action == "restart")
+local missing_test, _, missing_test_state = task_specs.test(project.canonical(no_test_root), {})
 assert(missing_test == nil and missing_test_state == "missing", "explicit Test silently skipped")
 assert(project.initialize(no_test_root, { validator = accept_validation }))
-local empty_test_build = assert(task_specs.build(project.canonical(no_test_root)))
+local empty_test_build =
+  assert(task_specs.build(project.canonical(no_test_root), definitions(no_test_root)))
 assert(empty_test_build.strategy.tasks[2].cmd[2] == "absent", "empty task config blocked build")
 
 local candidate_root = vim.fs.joinpath(temp_root, "plugin with unconfigured runner")
@@ -664,7 +673,7 @@ local candidate_runner = vim.fs.joinpath(candidate_root, "scripts", "test")
 write(candidate_runner, { "#!/bin/bash", "touch runner-was-executed" })
 make_executable(candidate_runner)
 for _, detected_root in ipairs({ candidate_root, unaggregated_root }) do
-  local detected_build = assert(task_specs.build(project.canonical(detected_root)))
+  local detected_build = assert(task_specs.build(project.canonical(detected_root), {}))
   local skipped_step = detected_build.strategy.tasks[2]
   assert(skipped_step.cmd[2] == "detected", "detected tests got the absent-test warning")
   assert(skipped_step.components[1].detected == true)
@@ -676,17 +685,21 @@ end
 local invalid_tasks_root = vim.fs.joinpath(temp_root, "plugin with invalid tasks")
 create_project(invalid_tasks_root)
 write(project.tasks_path(invalid_tasks_root), { "not json" })
-local invalid_build, invalid_build_error = task_specs.build(project.canonical(invalid_tasks_root))
-assert(invalid_build == nil and invalid_build_error, "build silently skipped invalid task config")
+local invalid_build, invalid_build_error =
+  require("omarchy-plugin-dev.targets").resolve(invalid_tasks_root)
+assert(
+  invalid_build == nil and invalid_build_error,
+  "target resolution skipped invalid task config"
+)
 config.setup({
   tasks = {
     build = { cmd = { "/bin/true" }, name = "Custom build" },
   },
 })
-local custom_build = assert(task_specs.build(project.canonical(no_test_root)))
+local custom_build = assert(task_specs.build(project.canonical(no_test_root), {}))
 assert(vim.deep_equal(custom_build.cmd, { "/bin/true" }), "custom build override was ignored")
 config.setup({ tasks = { build = { name = "Partial build override" } } })
-local partial_build = assert(task_specs.build(project.canonical(no_test_root)))
+local partial_build = assert(task_specs.build(project.canonical(no_test_root), {}))
 assert(partial_build.name == "Partial build override")
 assert(
   partial_build.strategy.tasks[2].metadata.omarchy_plugin_dev_action == "test_skipped",
@@ -702,61 +715,32 @@ config.setup({
     end,
   },
 })
-local function_build = assert(task_specs.build(project.canonical(root)))
+local function_build = assert(task_specs.build(project.canonical(root), definitions(root)))
 assert(function_default ~= nil, "build function override lost its default spec")
 assert(function_build.name == "Function build", "build function override was not applied")
 local function_without_test, _, function_preflight =
-  task_specs.build(project.canonical(no_test_root))
+  task_specs.build(project.canonical(no_test_root), {})
 assert(function_without_test, "function build rejected an unconfigured test")
 assert(function_without_test.strategy.tasks[2].cmd[2] == "absent")
 assert(function_preflight == nil, "custom function build lost its prerequisite policy")
-config.setup({ tasks = { test = { cmd = { "/bin/true" } } } })
-local lua_test_build = assert(task_specs.build(project.canonical(no_test_root)))
-assert(lua_test_build.strategy.tasks[2].metadata.omarchy_plugin_dev_action == "test")
-assert(lua_test_build.strategy.tasks[2].cmd[1] == "/bin/true", "configured Lua test was skipped")
+assert(
+  not pcall(config.setup, { tasks = { test = { cmd = { "/bin/true" } } } }),
+  "global test override was accepted"
+)
+local disabled_build = assert(task_specs.build(project.canonical(no_test_root), { test = false }))
+assert(#disabled_build.strategy.tasks == 2, "disabled tests added an execution step")
 config.setup()
 
 local hot_reload_spec = assert(task_specs.hot_reload(project.canonical(root)))
 local hot_reload_steps = hot_reload_spec.strategy.tasks
-assert(#hot_reload_steps == 3, "build should check, deploy, and restart exactly once")
-assert(
-  hot_reload_steps[2].cmd[1]:match("/scripts/deploy$"),
-  "build does not use the staged deployment helper"
-)
-assert(
-  vim.deep_equal(hot_reload_steps[2].components, { "default" }),
-  "deploy task still treats ordinary output as diagnostics"
-)
-assert(
-  vim.tbl_contains(hot_reload_steps[2].cmd, "--enable-auto"),
-  "build does not enable each deployment by default"
-)
-assert(
-  vim.tbl_contains(hot_reload_steps[2].cmd, "--enable-first-install"),
-  "build does not enable a first installation by default"
-)
-assert(
-  hot_reload_steps[3].cmd[1]:match("/scripts/restart%-shell$"),
-  "build does not use the shell restart helper"
-)
-assert(
-  hot_reload_steps[3].env.OMARCHY_PLUGIN_DEV_OMARCHY == config.get().executables.omarchy,
-  "shell restart helper did not receive the configured Omarchy executable"
-)
-
-config.setup({ enable_auto = false, enable_first_install = false })
-local disabled_enable_spec = assert(task_specs.hot_reload(project.canonical(root)))
-assert(
-  not vim.tbl_contains(disabled_enable_spec.strategy.tasks[2].cmd, "--enable-auto"),
-  "disabled automatic enabling remained in the deploy command"
-)
-assert(
-  not vim.tbl_contains(disabled_enable_spec.strategy.tasks[2].cmd, "--enable-first-install"),
-  "disabled first-install enabling remained in the deploy command"
-)
+assert(#hot_reload_steps == 2, "build should check and restart exactly once")
+assert(hot_reload_steps[1].metadata.omarchy_plugin_dev_action == "check")
+assert(hot_reload_steps[2].cmd[1]:match("/scripts/restart%-shell$"), "restart helper is missing")
+assert(hot_reload_steps[2].env.OMARCHY_PLUGIN_DEV_OMARCHY == config.get().executables.omarchy)
+assert(not pcall(config.setup, { enable_auto = false }), "obsolete deployment option was accepted")
 config.setup()
 
-local build_spec = assert(task_specs.build(project.canonical(root)))
+local build_spec = assert(task_specs.build(project.canonical(root), definitions(root)))
 local build_steps = build_spec.strategy.tasks
 local restart_count = 0
 for _, step in ipairs(build_steps) do
@@ -788,6 +772,12 @@ if vim.fn.executable("/usr/lib/qt6/bin/qmlls") == 1 then
     lsp.executable() == "/usr/lib/qt6/bin/qmlls",
     "automatic QML server resolution did not prefer the system Qt server"
   )
+end
+local targets = require("omarchy-plugin-dev.targets")
+local saved_resolve, saved_overseer = targets.resolve, package.loaded.overseer
+package.loaded.overseer = {}
+targets.resolve = function(path)
+  return { root = path, entry = { tasks = definitions(path) } }
 end
 local saved_import_paths = qml.import_paths
 local saved_show = require("omarchy-plugin-dev.messages").show
@@ -855,7 +845,7 @@ assert(
   "build silently skipped an unavailable test"
 )
 assert(
-  #notifications == 1 and notifications[1]:find("Test is unavailable", 1, true),
+  #notifications == 1 and notifications[1]:find("Task is unavailable", 1, true),
   "build did not explain the unavailable configured test"
 )
 notifications = {}
@@ -865,6 +855,7 @@ assert(#notifications == 1 and notifications[1]:find("Check is unavailable", 1, 
 rawset(vim, "notify", original_notify)
 config.setup()
 
+targets.resolve, package.loaded.overseer = saved_resolve, saved_overseer
 local mapping_buf = vim.api.nvim_create_buf(true, false)
 local mappings = require("omarchy-plugin-dev.mappings")
 local prior_build = function() end
@@ -1282,21 +1273,20 @@ package.loaded.overseer = {
 config.setup({
   executables = { qml_language_server = "definitely-missing-qml-language-server" },
 })
+assert(targets.remember(project.canonical(root), "Local project"))
 local check_task = assert(tasks.check(project.canonical(root)))
 assert(check_task.starts == 1, "check task did not start")
 assert(check_task.spec.cwd == project.canonical(root), "visible check task has the wrong root")
 assert(opened[#opened].focus_task_id == check_task.id, "check task was not shown in Overseer")
 config.setup({
   tasks = {
-    test = { cmd = "printf test" },
     hello = { cmd = "printf hello" },
   },
   executables = { qml_language_server = "definitely-missing-qml-language-server" },
 })
-assert(
-  tasks.test(project.canonical(root)).spec.cmd == "printf test",
-  "string test override did not start"
-)
+local configured_test = tasks.test(project.canonical(root)).spec.cmd
+assert(configured_test[1]:match("/scripts/run%-target$"), "test bypassed the target guard")
+assert(configured_test[#configured_test] == "./scripts/test", "selected test command changed")
 local original_select = vim.ui.select
 vim.ui.select = function(choices, _, callback)
   for _, choice in ipairs(choices) do
@@ -1309,7 +1299,8 @@ vim.ui.select = function(choices, _, callback)
 end
 tasks.picker(project.canonical(root))
 vim.ui.select = original_select
-assert(created_tasks[#created_tasks].spec.cmd == "printf hello", "string custom task did not start")
+local custom_command = created_tasks[#created_tasks].spec.cmd
+assert(custom_command[#custom_command] == "printf hello", "string custom task did not start")
 config.setup({ executables = { qml_language_server = "definitely-missing-qml-language-server" } })
 
 vim.cmd.buffer(project_buf)

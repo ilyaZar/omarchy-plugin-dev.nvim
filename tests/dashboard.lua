@@ -7,6 +7,8 @@ local saved_actions = package.loaded["omarchy-plugin-dev.actions"]
 local saved_validate = project.external_validate_async
 local saved_test_state = project.test_state
 local saved_inspect = project.inspect
+local sources = require("omarchy-plugin-dev.sources")
+local saved_sources = sources.snapshot
 local lsp = require("omarchy-plugin-dev.lsp")
 local saved_lsp_status = lsp.status
 local columns, lines = vim.o.columns, vim.o.lines
@@ -41,6 +43,13 @@ end
 project.inspect = function(bufnr)
   assert(bufnr == source_buf, "inspection lost the source buffer")
   return vim.deepcopy(info)
+end
+sources.snapshot = function()
+  return {
+    entries = { { name = "Local", label = "Local", detail = info.root, active = true } },
+    context = { root = info.root, entry = { tasks = {} } },
+    detail = "Selected: Local",
+  }
 end
 lsp.status = function()
   return "running", "running as client 2"
@@ -141,9 +150,17 @@ check_manifest_style(buf, "recognized", "DiagnosticOk", "Comment")
 assert(contents:find("schema v1 (dev.dashboard)", 1, true), "schema detail was lost")
 assert(contents:find("running as client 2", 1, true), "LSP detail was lost")
 assert(contents:match("configured%s+true"), "test command detail was lost")
-assert(selected_text(buf, win):find("root:", 1, true), "status did not select its first row")
+assert(
+  selected_text(buf, win):find("editor project:", 1, true),
+  "status did not select its first row"
+)
 key(buf, "<CR>")()
 assert(#calls == 0 and vim.api.nvim_win_is_valid(win), "status Enter executed an action")
+key(buf, "j")()
+assert(
+  selected_text(buf, win):find("build destination:", 1, true),
+  "j did not select the destination"
+)
 key(buf, "j")()
 assert(selected_text(buf, win):find("manifest:", 1, true), "j did not select the next field")
 key(buf, "<Down>")()
@@ -159,7 +176,7 @@ assert(
 )
 vim.api.nvim_win_set_cursor(win, { 1, 4 })
 vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-assert(selected_text(buf, win):find("root:", 1, true), "cursor escaped to a heading")
+assert(selected_text(buf, win):find("editor project:", 1, true), "cursor escaped to a heading")
 vim.api.nvim_win_set_cursor(win, { vim.api.nvim_win_get_cursor(win)[1], 5 })
 vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
 assert(vim.api.nvim_win_get_cursor(win)[2] == 0, "horizontal movement was not constrained")
@@ -181,9 +198,9 @@ assert(not contents:find("_COMM=custom", 1, true), "build includes tool rows")
 assert(contents:find("Run the plugin's health check", 1, true), "health description is unclear")
 assert(selected_text(buf, win):find("[h]", 1, true), "build did not select its first row")
 key(buf, "G")()
-assert(selected_text(buf, win):find("[c]", 1, true), "build did not select its last action")
+assert(selected_text(buf, win):find("Local", 1, true), "build did not select its last target")
 key(buf, "j")()
-assert(selected_text(buf, win):find("[c]", 1, true), "build selection escaped its rows")
+assert(selected_text(buf, win):find("Local", 1, true), "build selection escaped its rows")
 key(buf, "3")()
 check_layout(buf)
 assert(text(buf):find("Build keybindings", 1, true), "3 did not select settings")
@@ -212,7 +229,7 @@ assert(selected_text(buf, win):find("[h]", 1, true), "Tab did not wrap to Build"
 key(buf, "<S-Tab>")()
 assert(selected_text(buf, win):find("hot reload:", 1, true), "Shift-Tab did not wrap to Settings")
 key(buf, "<S-Tab>")()
-assert(selected_text(buf, win):find("root:", 1, true), "Shift-Tab did not select Status")
+assert(selected_text(buf, win):find("editor project:", 1, true), "Shift-Tab did not select Status")
 key(buf, "1")()
 assert(text(buf) == contents, "1 did not restore Build")
 key(buf, "gg")()
@@ -337,6 +354,7 @@ vim.o.columns, vim.o.lines = columns, lines
 project.external_validate_async = saved_validate
 project.test_state = saved_test_state
 project.inspect = saved_inspect
+sources.snapshot = saved_sources
 lsp.status = saved_lsp_status
 package.loaded["omarchy-plugin-dev.actions"] = saved_actions
 ---@diagnostic disable-next-line: param-type-mismatch

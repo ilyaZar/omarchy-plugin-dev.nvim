@@ -3,6 +3,9 @@
 Run `./scripts/test` for automated checks and
 `stylua --check ftdetect lua plugin tests` for Lua formatting.
 Run `./scripts/check-lua` with LuaLS on PATH for type diagnostics.
+The target backend checks use Python 3's standard library, Git, jq, rsync,
+and util-linux. They use temporary local repositories and stub Omarchy
+commands; no running desktop or network access is needed.
 
 For Lua line coverage, install LuaCov 0.17.0 and LuaFileSystem 1.8.0 for
 Lua 5.1, then run `./scripts/test --coverage`. The report is written to

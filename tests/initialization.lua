@@ -69,7 +69,10 @@ local b, b_buf = fixture("b")
 vim.api.nvim_set_current_buf(b_buf)
 pending[1].callback(true)
 assert(vim.fn.filereadable(project.tasks_path(a)) == 1, "delayed validation did not create tasks")
-assert(project.load_tasks(a).tasks.test.command[1] == "./scripts/test", "runner choice was lost")
+assert(
+  project.load_tasks(a).builds[1].tasks.test.command[1] == "./scripts/test",
+  "runner choice was lost"
+)
 assert(vim.api.nvim_get_current_buf() == b_buf, "completion changed the active buffer")
 
 actions.init_project(b_buf)
@@ -118,7 +121,7 @@ actions.init_project(d_buf)
 selected(choices[2])
 assert(#pending == 7, "approved overwrite did not start validation")
 pending[7].callback(true)
-assert(project.load_tasks(d).tasks.new == nil, "approved overwrite was not applied")
+assert(project.load_tasks(d).builds[1].tasks.new == nil, "approved overwrite was not applied")
 
 local e, e_buf = fixture("e", true)
 vim.api.nvim_set_current_buf(e_buf)

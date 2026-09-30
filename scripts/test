@@ -23,6 +23,6 @@ export XDG_STATE_HOME="$test_home/state"
 if [[ $test_init == tests/coverage-init.lua ]]; then
   test -s coverage/luacov.report.out
 fi
-./tests/deploy.sh
+python3 tests/targets.py
 ./tests/restart_shell.sh
 ./tests/task_wrappers.sh

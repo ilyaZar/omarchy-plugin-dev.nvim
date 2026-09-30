@@ -4,6 +4,8 @@ local project = require("omarchy-plugin-dev.project")
 local actions = require("omarchy-plugin-dev.actions")
 local lsp = require("omarchy-plugin-dev.lsp")
 local messages = require("omarchy-plugin-dev.messages")
+local sources = require("omarchy-plugin-dev.sources")
+local saved_sources = sources.snapshot
 local saved_config = vim.deepcopy(config.get())
 local saved_validate, saved_lsp, saved_show =
   project.external_validate_async, lsp.status, messages.show
@@ -22,6 +24,33 @@ local function save_manifest()
   vim.fn.writefile({ vim.json.encode(manifest) }, root .. "/manifest.json")
 end
 save_manifest()
+local function save_tasks(definitions)
+  vim.fn.mkdir(root .. "/.omarchy-plugin-dev", "p")
+  vim.fn.writefile({
+    vim.json.encode({
+      version = 2,
+      builds = {
+        {
+          name = "Local",
+          type = "local-source",
+          source = ".",
+          destination = ".",
+          tasks = definitions,
+        },
+      },
+    }),
+  }, project.tasks_path(root))
+end
+save_tasks(vim.empty_dict())
+sources.snapshot = function()
+  local data, err = project.load_tasks(root)
+  return {
+    entries = {},
+    detail = err or "Selected: Local",
+    error = err,
+    context = data and { root = root, entry = data.builds[1] } or nil,
+  }
+end
 local tool, lint = root .. "/bin/tool", root .. "/bin/qmllint"
 local function executable(path, body)
   vim.fn.writefile({ "#!/bin/sh", body }, path)
@@ -98,7 +127,7 @@ field(buf, "official validation", "checking")
 field(buf, "manifest", "dev.refresh")
 field(buf, "qmllint", "6.10.0", "DiagnosticOk")
 field(buf, "Overseer", "available")
-field(buf, "project tasks", "not initialized")
+field(buf, "project tasks", "valid")
 assert(
   #pending == 1 and #vim.fn.readfile(lint .. ".probes") == 1,
   "initial collection ran more than once"
@@ -114,15 +143,11 @@ assert(
 vim.fn.mkdir(root .. "/tests", "p")
 vim.fn.writefile({ "test fixture" }, root .. "/tests/example.lua")
 field(buf, "test task", "tests NOT detected")
-manifest.id, manifest.schemaVersion = "dev.refreshed", 42
+manifest.id = "dev.refreshed"
 save_manifest()
 lint_version("6.11.1")
 lsp_state, lsp_detail = "running", "running as client 17"
-vim.fn.mkdir(root .. "/.omarchy-plugin-dev", "p")
-vim.fn.writefile(
-  { vim.json.encode({ version = 1, tasks = { audit = { command = { tool } } } }) },
-  project.tasks_path(root)
-)
+save_tasks({ audit = { command = { tool } } })
 assert(vim.fn.delete(tool) == 0)
 options.logs.match = "refreshed logs"
 options.config_file = "lua/refreshed-settings.lua"
@@ -154,8 +179,8 @@ key(buf, "2")
 field(buf, "official validation", "checking")
 assert(not text(buf):find("stale validation", 1, true), "old validation overwrote refreshed state")
 field(buf, "test task", "tests found, no aggregate runner", "DiagnosticWarn")
-field(buf, "manifest", "dev.refreshed", "DiagnosticError")
-field(buf, "manifest", "schema v42")
+field(buf, "manifest", "dev.refreshed", "DiagnosticOk")
+field(buf, "manifest", "schema v1")
 field(buf, "project tasks", "valid", "DiagnosticOk")
 field(buf, "qml-language-server", "running as client 17", "DiagnosticOk")
 field(buf, "qmllint", "6.11.1", "DiagnosticOk")
@@ -182,10 +207,7 @@ key(buf, "r")
 field(buf, "test task", "tests found, no aggregate runner", "DiagnosticWarn")
 
 executable(tool, 'touch "$0.executed"')
-vim.fn.writefile(
-  { vim.json.encode({ version = 1, tasks = { test = { command = { tool } } } }) },
-  project.tasks_path(root)
-)
+save_tasks({ test = { command = { tool } } })
 key(buf, "r")
 field(buf, "test task", "configured", "DiagnosticOk")
 assert(vim.fn.filereadable(tool .. ".executed") == 0, "refresh executed a configured test")
@@ -195,7 +217,7 @@ field(buf, "test task", "configured, executable missing", "DiagnosticError")
 vim.fn.writefile({ "not JSON" }, project.tasks_path(root))
 key(buf, "r")
 field(buf, "project tasks", "invalid", "DiagnosticError")
-field(buf, "test task", "invalid", "DiagnosticError")
+field(buf, "test task", "Invalid task configuration", "DiagnosticError")
 
 local theme_groups = {
   Normal = true,
@@ -227,6 +249,7 @@ assert(notices[#notices]:find("Cannot refresh dashboard:", 1, true))
 assert(notices[#notices]:find("not valid JSON", 1, true))
 late(false, "closed dashboard result")
 save_manifest()
+save_tasks(vim.empty_dict())
 local retained_buf, retained_win = actions.dashboard(source_buf)
 assert(retained_buf and retained_win)
 vim.bo[retained_buf].bufhidden = "hide"
@@ -244,6 +267,7 @@ assert(not vim.api.nvim_win_is_valid(new_win), "refresh did not reject a deleted
 assert(notices[#notices]:find("buffer has no usable path", 1, true))
 pending[#pending](true)
 
+sources.snapshot = saved_sources
 project.external_validate_async, lsp.status, messages.show = saved_validate, saved_lsp, saved_show
 package.loaded.overseer, package.preload.overseer = saved_overseer, saved_preload
 vim.api.nvim_set_current_win(main_win)
