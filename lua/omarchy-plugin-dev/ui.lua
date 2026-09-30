@@ -97,9 +97,10 @@ local function render(state, reset)
   local tabs = {}
   for index, name in ipairs(dashboard.tabs) do
     tabs[#tabs + 1] = {
-      string.format("  [%d %s]", index, name),
-      state.active_view == index and "DiagnosticWarn" or "Comment",
+      string.format("  [%d]", index),
+      state.active_view == index and "DiagnosticWarn" or "DiagnosticInfo",
     }
+    tabs[#tabs + 1] = { " " .. name, "Normal" }
   end
   local rows = { tabs, {} }
   vim.list_extend(rows, state.views[state.active_view])

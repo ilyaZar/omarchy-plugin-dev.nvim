@@ -93,7 +93,7 @@ local function check_layout(bufnr)
         assert(detail[4].hl_group == "Comment", "field explanation is not dimmed")
         assert(line:sub(detail[3] + 1, detail[3] + 2) == "  ", "detail separator is not spaces")
       end
-    elseif line:match("^  %[.%]") then
+    elseif line:match("^  %[%a%]") then
       local detail = marks[#marks]
       action_column = action_column or detail[3]
       assert(detail[3] == action_column, "action explanations are not aligned")
@@ -102,6 +102,17 @@ local function check_layout(bufnr)
     end
   end
 end
+local function check_tab_style(bufnr, active)
+  local ns = vim.api.nvim_get_namespaces()["omarchy-plugin-dev.dashboard"]
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, ns, { 0, 0 }, { 0, -1 }, { details = true })
+  assert(#marks == 6, "tab shortcuts and labels are not separate")
+  for index = 1, 3 do
+    local shortcut = marks[index * 2 - 1][4].hl_group
+    assert(shortcut == (index == active and "DiagnosticWarn" or "DiagnosticInfo"))
+    assert(marks[index * 2][4].hl_group == "Normal", "tab label is not Normal")
+  end
+end
+
 local function check_manifest_style(bufnr, state, status_group, detail_group)
   local ns = vim.api.nvim_get_namespaces()["omarchy-plugin-dev.dashboard"]
   for index, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
@@ -118,11 +129,13 @@ local function check_manifest_style(bufnr, state, status_group, detail_group)
   error("manifest row is missing")
 end
 local contents = text(buf)
-assert(contents:find("[1 Build]  [2 Status]  [3 Settings]", 1, true), "dashboard tabs changed")
+assert(contents:find("[1] Build  [2] Status  [3] Settings", 1, true), "dashboard tabs changed")
+check_tab_style(buf, 1)
 assert(contents:find("  Actions ", 1, true), "Build is not the initial tab")
 assert(selected_text(buf, win):find("[h]", 1, true), "Build did not select its first action")
 key(buf, "2")()
 contents = text(buf)
+check_tab_style(buf, 2)
 check_layout(buf)
 check_manifest_style(buf, "recognized", "DiagnosticOk", "Comment")
 assert(contents:find("schema v1 (dev.dashboard)", 1, true), "schema detail was lost")

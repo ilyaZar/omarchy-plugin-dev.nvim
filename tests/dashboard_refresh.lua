@@ -90,7 +90,7 @@ end
 vim.api.nvim_set_current_buf(source_buf)
 local buf, win = actions.dashboard(0)
 assert(buf and win)
-assert(text(buf):find("[1 Build]  [2 Status]  [3 Settings]", 1, true))
+assert(text(buf):find("[1] Build  [2] Status  [3] Settings", 1, true))
 assert(text(buf):find("  Actions ", 1, true), "Build is not the initial tab")
 key(buf, "2")
 field(buf, "test task", "tests NOT detected", "DiagnosticError")
