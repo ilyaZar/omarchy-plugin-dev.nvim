@@ -25,27 +25,7 @@ local function lint_components()
   }
 end
 
-local function plugin_root()
-  local source = debug.getinfo(1, "S").source:gsub("^@", "")
-  return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
-end
-
-local function script_path(name)
-  return vim.fs.joinpath(plugin_root(), "scripts", name)
-end
-
-local function deploy_command(root)
-  local values = config.get()
-  local command = { script_path("deploy"), "--apply" }
-  if values.enable_auto then
-    command[#command + 1] = "--enable-auto"
-  end
-  if values.enable_first_install then
-    command[#command + 1] = "--enable-first-install"
-  end
-  command[#command + 1] = root
-  return command
-end
+local script_path = require("omarchy-plugin-dev.targets").script
 
 local function apply_override(name, root, spec)
   local override = config.get().tasks[name]
@@ -150,6 +130,7 @@ local function check_steps(root)
     cwd = root,
     env = {
       OMARCHY_PLUGIN_DEV_OMARCHY = values.executables.omarchy,
+      OMARCHY_PLUGIN_DEV_RSYNC = values.executables.rsync,
     },
     components = { "default" },
     metadata = metadata(root, "validate"),
@@ -192,17 +173,12 @@ function M.check(root)
   return finalize(apply_override("check", root, spec), root, "check", "Check plugin")
 end
 
-function M.test(root)
-  local data, load_error = project.load_tasks(root)
-  if not data then
-    return nil, load_error
+function M.test(root, definitions)
+  local definition = definitions.test
+  if definition == false then
+    return nil, nil, "disabled"
   end
-  local definition = data.tasks.test
   if not definition then
-    local override = apply_override("test", root, nil)
-    if override then
-      return finalize(override, root, "test", "Test plugin")
-    end
     return nil, nil, "missing"
   end
   local command = { script_path("run-project-test") }
@@ -214,22 +190,7 @@ function M.test(root)
     components = { "default" },
     metadata = metadata(root, "test"),
   }
-  return finalize(apply_override("test", root, spec), root, "test", "Test plugin")
-end
-
-local function deploy(root)
-  local executables = config.get().executables
-  return finalize({
-    name = "Deploy plugin",
-    cmd = deploy_command(root),
-    cwd = root,
-    env = {
-      OMARCHY_PLUGIN_DEV_JQ = executables.jq,
-      OMARCHY_PLUGIN_DEV_OMARCHY = executables.omarchy,
-      OMARCHY_PLUGIN_DEV_RSYNC = executables.rsync,
-    },
-    components = { "default" },
-  }, root, "deploy", "Deploy plugin")
+  return finalize(spec, root, "test", "Test plugin")
 end
 
 local function restart(root)
@@ -251,7 +212,7 @@ function M.hot_reload(root)
     cwd = root,
     strategy = {
       "orchestrator",
-      tasks = { M.check(root), deploy(root), restart(root) },
+      tasks = { M.check(root), restart(root) },
     },
     components = { "default" },
     metadata = metadata(root, "hot_reload"),
@@ -264,8 +225,8 @@ function M.hot_reload(root)
   )
 end
 
-local function skipped_test(root)
-  local state = project.test_state(root)
+local function skipped_test(root, definitions)
+  local state = project.test_state(root, definitions)
   local detected = state.kind == "candidate" or state.kind == "unaggregated"
   return finalize({
     name = "Tests skipped (not configured)",
@@ -278,7 +239,7 @@ local function skipped_test(root)
   }, root, "test_skipped", "Tests skipped (not configured)")
 end
 
-function M.build(root)
+function M.build(root, definitions)
   if is_complete_table_override("build") then
     return finalize(
       apply_override("build", root, nil),
@@ -291,15 +252,16 @@ function M.build(root)
   end
 
   local steps = { M.check(root) }
-  local test_spec, test_error, test_state = M.test(root)
+  local test_spec, test_error, test_state = M.test(root, definitions)
   if test_error then
     return nil, test_error
   end
   if test_state == "missing" then
-    test_spec = skipped_test(root)
+    test_spec = skipped_test(root, definitions)
   end
-  steps[#steps + 1] = assert(test_spec)
-  steps[#steps + 1] = deploy(root)
+  if test_spec then
+    steps[#steps + 1] = test_spec
+  end
   steps[#steps + 1] = restart(root)
 
   local spec = {
@@ -341,12 +303,8 @@ function M.logs(root)
   return finalize(apply_override("logs", root, spec), root, "logs", "Omarchy Plugin: shell logs")
 end
 
-function M.custom(root, name)
-  local data, load_error = project.load_tasks(root)
-  if not data then
-    return nil, load_error
-  end
-  local definition = data.tasks[name]
+function M.custom(root, name, definitions)
+  local definition = definitions[name]
   local configured = config.get().tasks[name]
   local spec
   if definition then

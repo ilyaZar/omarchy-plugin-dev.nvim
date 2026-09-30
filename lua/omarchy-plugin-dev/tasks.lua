@@ -1,12 +1,11 @@
 local M = {}
 
 local messages = require("omarchy-plugin-dev.messages")
-local project = require("omarchy-plugin-dev.project")
 local specs = require("omarchy-plugin-dev.task_specs")
+local targets = require("omarchy-plugin-dev.targets")
 
 local core_names = {
   check = true,
-  deploy = true,
   hot_reload = true,
   logs = true,
   build = true,
@@ -49,7 +48,10 @@ local function start(spec)
     return nil
   end
   local task = backend.new_task(spec)
-  task:start()
+  if task:start() == false then
+    task:dispose(true)
+    return nil
+  end
   require("omarchy-plugin-dev.task_layout").open(
     backend,
     { enter = false, focus_task_id = task.id }
@@ -78,8 +80,8 @@ end
 local function build_tools(root)
   local executables = require("omarchy-plugin-dev.config").get().executables
   return check_tools(root)
-    and require_executable(executables.jq, root, "Deployment")
-    and require_executable(executables.rsync, root, "Deployment")
+    and require_executable(executables.jq, root, "Validation")
+    and require_executable(executables.rsync, root, "Validation")
 end
 
 local function test_executable(spec)
@@ -98,20 +100,33 @@ local function show_spec_error(spec_error)
   end
 end
 
-function M.check(root)
-  if not check_tools(root) then
+local function run(root, action, custom_name)
+  if not overseer() then
     return nil
   end
-  return start(specs.check(root))
-end
-
-function M.test(root)
-  local spec, spec_error, state = specs.test(root)
+  local context, target_error = targets.resolve(root, action == "hot_reload" or action == "build")
+  if not context then
+    show_spec_error(target_error)
+    return nil
+  end
+  local override = require("omarchy-plugin-dev.config").get().tasks[action]
+  local custom = type(override) == "table" and (override.cmd or override.strategy)
+  if (action == "check" or action == "hot_reload" or action == "build") and not custom then
+    if not build_tools(context.root) then
+      return nil
+    end
+  end
+  local spec, spec_error, test
+  if action == "custom" then
+    spec, spec_error = specs.custom(context.root, custom_name, context.entry.tasks)
+  else
+    spec, spec_error, test = specs[action](context.root, context.entry.tasks)
+  end
   if not spec then
-    if state == "missing" then
+    if action == "test" and (test == "missing" or test == "disabled") then
       messages.show(
-        "No test task is configured. Run :OmaDevInit, then edit "
-          .. project.existing_tasks_path(root),
+        test == "disabled" and "Tests disabled for this build"
+          or "No test task configured for this build; edit task-config.json",
         vim.log.levels.INFO
       )
     else
@@ -119,36 +134,25 @@ function M.test(root)
     end
     return nil
   end
-  local command = test_executable(spec)
-  if command and not require_executable(command, root, "Test") then
+  local checked = type(test) == "table" and test or spec
+  local command = test_executable(checked)
+  if command and not require_executable(command, context.root, "Task") then
     return nil
   end
-  return start(spec)
+  return start(targets.decorate(spec, context))
 end
 
+function M.check(root)
+  return run(root, "check")
+end
+function M.test(root)
+  return run(root, "test")
+end
 function M.hot_reload(root)
-  if not build_tools(root) then
-    return nil
-  end
-  return start(specs.hot_reload(root))
+  return run(root, "hot_reload")
 end
-
 function M.build(root)
-  local spec, spec_error, test_spec = specs.build(root)
-  if not spec then
-    show_spec_error(spec_error)
-    return nil
-  end
-  if test_spec then
-    if not build_tools(root) then
-      return nil
-    end
-    local command = test_executable(test_spec)
-    if command and not require_executable(command, root, "Test") then
-      return nil
-    end
-  end
-  return start(spec)
+  return run(root, "build")
 end
 
 function M.logs(root)
@@ -160,27 +164,15 @@ function M.logs(root)
 end
 
 local function run_custom(root, name)
-  local spec, spec_error = specs.custom(root, name)
-  if not spec then
-    show_spec_error(spec_error)
-    return nil
-  end
-  if
-    type(spec.cmd) == "table"
-    and spec.cmd[1]
-    and not require_executable(spec.cmd[1], root, "Project task")
-  then
-    return nil
-  end
-  return start(spec)
+  return run(root, "custom", name)
 end
 
 local function project_task_names(root)
   local names = {}
   local seen = {}
-  local data, load_error = project.load_tasks(root)
-  if not data then
-    return nil, load_error
+  local context, load_error = targets.resolve(root)
+  if not context then
+    return {}, load_error
   end
   for name in pairs(require("omarchy-plugin-dev.config").get().tasks) do
     if not core_names[name] then
@@ -188,7 +180,7 @@ local function project_task_names(root)
       seen[name] = true
     end
   end
-  for name in pairs(data.tasks) do
+  for name in pairs(context.entry.tasks) do
     if not core_names[name] and not seen[name] then
       names[#names + 1] = name
     end
@@ -204,7 +196,11 @@ local function open_overseer(root)
   end
   local focused
   for _, task in ipairs(backend.list_tasks({ recent_first = true })) do
-    if task.metadata and task.metadata.omarchy_plugin_dev_root == root then
+    if
+      task.metadata
+      and (task.metadata.omarchy_plugin_dev_project or task.metadata.omarchy_plugin_dev_root)
+        == root
+    then
       focused = task.id
       break
     end

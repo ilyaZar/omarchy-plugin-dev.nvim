@@ -33,12 +33,12 @@ end, {
 command("OmaDevHotReload", function()
   require("omarchy-plugin-dev.actions").hot_reload(0)
 end, {
-  desc = "Check, deploy, and restart the Omarchy shell",
+  desc = "Check the selected build target and restart the Omarchy shell",
 })
 command("OmaDevBuild", function()
   require("omarchy-plugin-dev.actions").build(0)
 end, {
-  desc = "Check, test, deploy, and restart the Omarchy shell",
+  desc = "Check and test the selected target, then restart the Omarchy shell",
 })
 command("OmaDevHealth", function()
   require("omarchy-plugin-dev.actions").health()

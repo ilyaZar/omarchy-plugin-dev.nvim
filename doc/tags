@@ -12,6 +12,7 @@ omarchy-plugin-dev-initialization	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-in
 omarchy-plugin-dev-introduction	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-introduction*
 omarchy-plugin-dev-mappings	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-mappings*
 omarchy-plugin-dev-requirements	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-requirements*
+omarchy-plugin-dev-sources	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-sources*
 omarchy-plugin-dev-task-overrides	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-task-overrides*
 omarchy-plugin-dev-troubleshooting	omarchy-plugin-dev.txt	/*omarchy-plugin-dev-troubleshooting*
 omarchy-plugin-dev.txt	omarchy-plugin-dev.txt	/*omarchy-plugin-dev.txt*

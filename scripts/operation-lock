@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/operation-lock.sh"
+omadev_lock "${1:?plugin id required}"
+# Child commands retain shared leases until their processes actually exit.
+flock -u "$omadev_worker_fd"
+printf 'locked\n'
+# EOF releases the lock when Neovim finishes the task or exits.
+while IFS= read -r _; do :; done

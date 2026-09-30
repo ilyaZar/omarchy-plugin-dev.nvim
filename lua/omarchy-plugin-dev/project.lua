@@ -2,18 +2,7 @@ local M = {}
 
 local manifest = require("omarchy-plugin-dev.manifest")
 
-local task_fields = {
-  command = true,
-  description = true,
-}
-
-local reserved_task_names = {
-  check = true,
-  deploy = true,
-  hot_reload = true,
-  logs = true,
-  build = true,
-}
+local task_config = require("omarchy-plugin-dev.task_config")
 
 local conventional_test_runners = {
   {
@@ -25,10 +14,6 @@ local conventional_test_runners = {
     path = "tests/all.sh",
   },
 }
-
-local function is_object(value)
-  return type(value) == "table" and not vim.islist(value)
-end
 
 local function read_file(path)
   local ok, lines = pcall(vim.fn.readfile, path)
@@ -96,24 +81,11 @@ function M.detect_file(bufnr_or_path)
   return info
 end
 
-function M.tasks_path(root)
-  return vim.fs.joinpath(root, ".omarchy-plugin-dev", "task-config.json")
-end
+M.tasks_path = task_config.path
+M.decode_tasks = task_config.decode
+M.load_tasks = task_config.load
 
-local function legacy_tasks_path(root)
-  return vim.fs.joinpath(root, ".omarchy-plugin-dev", "tasks.json")
-end
-
-function M.existing_tasks_path(root)
-  local path = M.tasks_path(root)
-  if vim.fn.filereadable(path) == 1 then
-    return path
-  end
-  local legacy_path = legacy_tasks_path(root)
-  return vim.fn.filereadable(legacy_path) == 1 and legacy_path or path
-end
-
-local function ensure_gitignore(root)
+function M.ensure_gitignore(root)
   local path = vim.fs.joinpath(root, ".gitignore")
   local lines = {}
   if vim.fn.filereadable(path) == 1 then
@@ -137,67 +109,6 @@ local function ensure_gitignore(root)
     return nil, nil, string.format("could not update %s", path)
   end
   return path, true
-end
-
-function M.decode_tasks(text, source_path)
-  local ok, data = pcall(vim.json.decode, text)
-  if not ok then
-    return nil, string.format("task configuration is not valid JSON at %s: %s", source_path, data)
-  end
-  if not is_object(data) then
-    return nil, "task configuration must contain an object"
-  end
-  for key in pairs(data) do
-    if key ~= "version" and key ~= "tasks" then
-      return nil, string.format("task configuration has unknown top-level field '%s'", key)
-    end
-  end
-  if data.version ~= 1 then
-    return nil, "task configuration version must be the number 1"
-  end
-  if not is_object(data.tasks) then
-    return nil, "task configuration tasks must be an object"
-  end
-
-  for name, task in pairs(data.tasks) do
-    if name == "" or not is_object(task) then
-      return nil, string.format("task '%s' must be an object", name)
-    end
-    if reserved_task_names[name] then
-      return nil, string.format("task name '%s' is reserved for a built-in action", name)
-    end
-    for field in pairs(task) do
-      if not task_fields[field] then
-        return nil, string.format("task '%s' has unknown field '%s'", name, field)
-      end
-    end
-    if type(task.command) ~= "table" or not vim.islist(task.command) or #task.command == 0 then
-      return nil, string.format("task '%s' command must be a non-empty argument array", name)
-    end
-    for index, argument in ipairs(task.command) do
-      if type(argument) ~= "string" or argument == "" then
-        return nil,
-          string.format("task '%s' command argument %d must be a non-empty string", name, index)
-      end
-    end
-    if task.description ~= nil and type(task.description) ~= "string" then
-      return nil, string.format("task '%s' description must be a string", name)
-    end
-  end
-  return data
-end
-
-function M.load_tasks(root)
-  local path = M.existing_tasks_path(root)
-  if vim.fn.filereadable(path) ~= 1 then
-    return { version = 1, tasks = {} }, nil, false
-  end
-  local text, read_error = read_file(path)
-  if not text then
-    return nil, read_error, true
-  end
-  local data, decode_error = M.decode_tasks(text, path)
-  return data, decode_error, true
 end
 
 local function command_path(root, command)
@@ -259,17 +170,23 @@ local function has_test_files(root)
   return false
 end
 
-function M.test_state(root)
-  local data, load_error, tasks_exists = M.load_tasks(root)
-  if not data then
+function M.test_state(root, definitions)
+  local tasks_exists = vim.uv.fs_stat(M.tasks_path(root)) ~= nil
+  if definitions == nil then
+    local context, load_error = require("omarchy-plugin-dev.targets").resolve(root)
+    if not context then
+      return { kind = "invalid", label = "invalid - " .. load_error, tasks_exists = tasks_exists }
+    end
+    root, definitions = context.root, context.entry.tasks
+  end
+  local definition = definitions.test
+  if definition == false then
     return {
-      kind = "invalid",
-      label = "invalid - " .. load_error,
+      kind = "disabled",
+      label = "tests disabled for this build",
       tasks_exists = tasks_exists,
     }
   end
-
-  local definition = data.tasks.test
   if definition then
     local path = command_path(root, definition.command)
     if path then
@@ -387,7 +304,7 @@ end
 
 local function write_tasks(root, opts)
   local path = M.tasks_path(root)
-  local existing_path = M.existing_tasks_path(root)
+  local existing_path = path
   if vim.fn.filereadable(existing_path) == 1 and not opts.force then
     return nil, string.format("configuration already exists: %s", existing_path), "exists"
   end
@@ -396,35 +313,12 @@ local function write_tasks(root, opts)
   if vim.fn.mkdir(directory, "p") == 0 and vim.fn.isdirectory(directory) ~= 1 then
     return nil, string.format("could not create directory: %s", directory)
   end
-  local lines
-  if opts.test_command then
-    lines = {
-      "{",
-      '  "version": 1,',
-      '  "tasks": {',
-      '    "test": {',
-      '      "command": ' .. vim.json.encode(opts.test_command),
-      "    }",
-      "  }",
-      "}",
-    }
-  else
-    lines = {
-      "{",
-      '  "version": 1,',
-      '  "tasks": {}',
-      "}",
-    }
-  end
+  local lines = task_config.starter(assert(M.validate_root(root)), opts.test_command)
   local write_error = vim.fn.writefile(lines, path)
   if write_error ~= 0 then
     return nil, string.format("could not write configuration: %s", path)
   end
-  local legacy_path = legacy_tasks_path(root)
-  if legacy_path ~= path and vim.fn.filereadable(legacy_path) == 1 then
-    vim.fn.delete(legacy_path)
-  end
-  local _, _, ignore_error = ensure_gitignore(root)
+  local _, _, ignore_error = M.ensure_gitignore(root)
   if ignore_error then
     return nil, ignore_error
   end
@@ -463,7 +357,7 @@ function M.initialize_async(root, opts, callback)
     end)
   end
 
-  local approved_path = M.existing_tasks_path(info.root)
+  local approved_path = M.tasks_path(info.root)
   local approved_content
   if opts.force and vim.fn.filereadable(approved_path) == 1 then
     approved_content, validation_error = read_file(approved_path)
@@ -489,7 +383,7 @@ function M.initialize_async(root, opts, callback)
       return
     end
     if opts.force then
-      local current_path = M.existing_tasks_path(info.root)
+      local current_path = M.tasks_path(info.root)
       local current_content = vim.fn.filereadable(current_path) == 1 and read_file(current_path)
         or nil
       if current_path ~= approved_path or current_content ~= approved_content then

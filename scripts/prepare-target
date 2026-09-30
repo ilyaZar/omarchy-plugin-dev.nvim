@@ -1,0 +1,119 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/target.sh"
+source "$SCRIPT_DIR/lib/operation-lock.sh"
+[[ $# == 2 && ( $1 == status || $1 == inspect || $1 == prepare ) ]] || fail 'Expected status|inspect|prepare and a target request'
+action=$1 request=$2
+JQ=${OMARCHY_PLUGIN_DEV_JQ:-jq}
+export GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -oBatchMode=yes}"
+root=$(realpath -e -- "$("$JQ" -er '.project' <<<"$request")")
+id=$("$JQ" -er '.id' <<<"$request")
+[[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $id != *..* && $id != omarchy.* ]] || fail 'Invalid plugin id'
+type=$("$JQ" -er '.entry.type' <<<"$request")
+source=$("$JQ" -er '.entry.source' <<<"$request")
+destination=$("$JQ" -er '.entry.destination' <<<"$request")
+[[ $destination == /* && $destination != / && $destination != */ ]] || fail 'Destination must be an absolute folder path'
+target="$(realpath -m -- "$(dirname -- "$destination")")/$(basename -- "$destination")"
+ref_kind=$("$JQ" -r '.entry.ref // {} | keys[0] // ""' <<<"$request")
+ref=$("$JQ" -r '.entry.ref // {} | .[]' <<<"$request")
+[[ $type == local-source || $type == symlink || $type == git-clone ]] || fail 'Unknown build type'
+plugins=$(realpath -m -- "$HOME/.config/omarchy/plugins")
+[[ $target != "$plugins" && ( $target != "$plugins/"* || $target == "$plugins/$id" ) ]] \
+  || fail 'Do not create another copy of this id inside the scanned plugin directory'
+valid_manifest "$root" || fail 'Project manifest changed or has a different plugin id'
+
+check_config() {
+  local actual expected
+  [[ "$(realpath -m -- "$(dirname -- "$destination")")/$(basename -- "$destination")" == "$target" ]] \
+    || fail 'Destination parent changed; refresh and select again'
+  actual=$(sha256sum -- "$root/.omarchy-plugin-dev/task-config.json" | cut -d ' ' -f 1)
+  expected=$("$JQ" -er '.config_hash' <<<"$request")
+  [[ $actual == "$expected" ]] || fail 'Task configuration changed; refresh and select again'
+}
+
+if [[ $action == prepare ]]; then omadev_lock "$id"; fi
+check_config
+inspect_target
+if [[ $action == status ]]; then
+  modified=0 untracked=0 ignored=0 ahead=unknown comparison=unknown
+  report
+  exit 0
+fi
+replacement_summary
+if [[ $action == inspect ]]; then report; exit 0; fi
+[[ $(fingerprint) == "$("$JQ" -er '.expected.fingerprint' <<<"$request")" ]] \
+  || fail 'Destination changed since confirmation; refresh and select again'
+[[ $operation == "$("$JQ" -er '.expected.operation' <<<"$request")" ]] \
+  || fail 'Destination no longer matches the confirmed operation'
+if [[ $operation == reuse ]]; then printf 'Reusing %s; no files changed\n' "$target"; exit 0; fi
+if [[ $kind == git-clone ]]; then
+  [[ $("$JQ" -r '.delete_approved // false' <<<"$request") == true ]] || fail 'Deleting a checkout requires explicit approval'
+fi
+
+checkout_reference() {
+  [[ -n $ref_kind ]] || return 0
+  case "$ref_kind" in
+    release)
+      [[ $source =~ ^https://github.com/([^/]+)/([^/]+)/?$ ]] || fail 'Release requires a GitHub HTTPS URL'
+      local owner=${BASH_REMATCH[1]} repo=${BASH_REMATCH[2]%.git} encoded tag
+      encoded=$("$JQ" -rn --arg value "$ref" '$value | @uri')
+      tag=$(curl --fail --silent --show-error --max-time 30 -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/$owner/$repo/releases/tags/$encoded" | "$JQ" -er 'select(.draft == false) | .tag_name')
+      [[ $tag == "$ref" ]] || fail 'Release tag mismatch'
+      ;;
+    tag) ;;
+    commit) [[ $ref =~ ^([[:xdigit:]]{40}|[[:xdigit:]]{64})$ ]] || fail 'Commit must be a full object id';;
+    *) fail 'Unknown reference selector';;
+  esac
+  local commit
+  if [[ $ref_kind == commit ]]; then
+    timeout -k 2 30 git -c core.hooksPath=/dev/null -C "$candidate" fetch origin "$ref"
+    commit=$(git -C "$candidate" rev-parse --verify "$ref^{commit}")
+    [[ ${commit,,} == "${ref,,}" ]] || fail 'Requested object is not a commit'
+  else
+    git check-ref-format "refs/tags/$ref"
+    commit=$(git -C "$candidate" rev-parse --verify "refs/tags/$ref^{commit}")
+  fi
+  git -c core.hooksPath=/dev/null -C "$candidate" checkout --detach "$commit"
+}
+
+mkdir -p -- "$(dirname -- "$target")"
+stage=$(mktemp -d "$(dirname -- "$target")/.omadev-prepare.XXXXXX")
+cleanup() { rm -rf -- "$stage"; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+candidate="$stage/plugin"
+before=$(fingerprint)
+parent_identity=$(stat -c '%d:%i' -- "$(dirname -- "$target")")
+if [[ $type == symlink ]]; then
+  ln -s -- "$source" "$candidate"
+else
+  omarchy-git-url-check "$source"
+  timeout -k 2 60 git -c core.hooksPath=/dev/null -c protocol.ext.allow=never clone -- "$source" "$candidate"
+  checkout_reference
+fi
+(cd -- "$candidate" && timeout -k 2 15 "$SCRIPT_DIR/validate-manifest")
+valid_manifest "$candidate" || fail 'Candidate has a different plugin id'
+check_config
+[[ $(fingerprint) == "$before" && $(stat -c '%d:%i' -- "$(dirname -- "$target")") == "$parent_identity" ]] \
+  || fail 'Destination changed while preparing the replacement'
+if [[ -L $target ]]; then
+  rm -- "$target"
+  printf 'Removed only the old symlink: %s\n' "$target"
+elif [[ -e $target ]]; then
+  protect_sources
+  ordinary_checkout || fail 'Destination is no longer a self-contained Git checkout'
+  [[ $kind == git-clone ]] || fail 'Destination type changed'
+  rm -rf --one-file-system -- "$target"
+fi
+mv -T --no-clobber -- "$candidate" "$target" \
+  || fail "Replacement failed after removal; destination may be empty: $target"
+[[ ! -e $candidate && ! -L $candidate ]] \
+  || fail "Another process occupied $target; its files were not replaced"
+printf 'Prepared %s at %s\n' "$type" "$target"
+if [[ $(realpath -e -- "$plugins/$id" 2>/dev/null || true) == "$(realpath -e -- "$target")" ]]; then
+  timeout -k 2 10 "${OMARCHY_PLUGIN_DEV_OMARCHY_SHELL:-omarchy-shell}" shell rescanPlugins \
+    || fail "Files are prepared at $target, but shell reload failed; no rollback or backup was made"
+fi

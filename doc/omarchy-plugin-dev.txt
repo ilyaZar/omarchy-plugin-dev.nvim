@@ -9,8 +9,9 @@ CONTENTS                                            *omarchy-plugin-dev-contents
 4. Commands.................................|omarchy-plugin-dev-commands|
 5. Mappings.................................|omarchy-plugin-dev-mappings|
 6. Configuration............................|omarchy-plugin-dev-configuration|
-7. Build semantics..........................|omarchy-plugin-dev-build|
-8. Troubleshooting..........................|omarchy-plugin-dev-troubleshooting|
+7. Sources..................................|omarchy-plugin-dev-sources|
+8. Build semantics..........................|omarchy-plugin-dev-build|
+9. Troubleshooting..........................|omarchy-plugin-dev-troubleshooting|
 
 ==============================================================================
 INTRODUCTION                                    *omarchy-plugin-dev-introduction*
@@ -26,9 +27,10 @@ REQUIREMENTS                                    *omarchy-plugin-dev-requirements
 - Neovim 0.11 or newer
 - stevearc/overseer.nvim
 - omarchy and Qt 6 qmllint for Check
-- omarchy-shell for automatic plugin enabling
+- omarchy-shell for refreshing prepared installations
 - journalctl for shell logs
-- jq and rsync for staged deployment
+- jq and rsync for validation; util-linux (flock and findmnt) for safety checks
+- git for clones; curl for GitHub releases; GNU coreutils and findutils
 - Qt qmlls for LSP features
 
 On Arch: >bash
@@ -45,39 +47,26 @@ INITIALIZATION                                *omarchy-plugin-dev-initialization
     add the hidden task directory to .gitignore before creating:
         .omarchy-plugin-dev/task-config.json
 
-    If an executable ./scripts/test or ./tests/all.sh exists, choose whether
-    to configure it. Otherwise an empty tasks object is created and opened
-    for editing. Initialization never invents a missing test command.
+    Create Local project and Local link entries. If an executable
+    ./scripts/test or ./tests/all.sh exists, choose whether to configure it
+    for these entries. Otherwise their tasks objects are empty. Initialization
+    never installs a plugin or executes a discovered runner.
 
 :OmaDevInit!
-    Explicitly approve replacing an existing task configuration. Without !, an
-    existing file is preserved and an overwrite choice is shown. Legacy
-    .omarchy-plugin-dev/tasks.json files remain readable and are replaced with
-    task-config.json only after explicit overwrite approval.
+    Explicitly approve replacing the existing task configuration. Without !,
+    an existing file is preserved and an overwrite choice is shown.
+    Replacement creates new entries, not a merge of previous custom tasks.
 
-    Replacement creates a new configuration from the selected test runner;
-    it does not preserve custom tasks from the previous file.
+Configure and select a target before running tasks. Version 2 is the only
+accepted task format. There is no secondary sources file, project-local Lua,
+old-schema reader, or automatic migration. See |omarchy-plugin-dev-sources|.
 
-Initialization is optional for the default :OmaDevHotReload workflow. Tests
-and custom tasks can be configured in task-config.json. For example: >json
-  {
-    "version": 1,
-    "tasks": {
-      "test": {
-        "command": ["./scripts/test"]
-      }
-    }
-  }
-<
-The current filename takes precedence when both it and legacy tasks.json
-exist. Initialization adds .omarchy-plugin-dev/ to the project's .gitignore.
-
-Schema version 1 contains a "tasks" object. Each task contains a non-empty
-"command" argument array and may contain a string "description". Commands
-always run at the detected project root. Shell command strings are invalid.
-The "test" task supplies the Test action. No project-local Lua is loaded.
-The names check, deploy, hot_reload, logs, and build are reserved in JSON.
-Other names appear as custom tasks in the dashboard's task picker (press p).
+Each build entry has its own tasks object. Each task has a non-empty command
+argv array and optional description. Shell command strings are invalid in
+JSON. The test task supplies Test and the full build; false disables it.
+The names check, hot_reload, logs, and build are reserved in JSON. Other names
+appear in the task picker (press p). Relative commands run at the selected
+destination, while configuration stays in the editor project.
 
 ==============================================================================
 COMMANDS                                            *omarchy-plugin-dev-commands*
@@ -95,18 +84,19 @@ COMMANDS                                            *omarchy-plugin-dev-commands
 
                                                                *:OmaDevTest*
 :OmaDevTest
-    Run the project-defined "test" argv. Missing configuration is a non-error
-    explanation that points to initialization.
+    Run the selected entry's "test" argv. Missing or disabled tests produce
+    an explanation rather than executing another entry's runner.
 
                                                           *:OmaDevHotReload*
 :OmaDevHotReload
-    Check, stage, validate, and deploy the project, then restart the Omarchy
-    shell exactly once.
+    Validate and lint the selected destination, then restart the Omarchy
+    shell exactly once. No test, copy, clone, or relink step.
 
                                                             *:OmaDevBuild*
 :OmaDevBuild
-    Check, run the configured test, deploy, then restart the shell exactly
-    once. Without a configured test, a Tests skipped step warns and continues:
+    Check the selected destination, run its configured test, then restart
+    once. An explicit false disables tests with an informational message.
+    Without a configured test, a Tests skipped step warns and continues:
     - Tests detected but not configured; skipping
     - Tests NOT detected; skipping
     Both warnings point to :OmaDevInit. Detection never executes a runner.
@@ -119,9 +109,10 @@ COMMANDS                                            *omarchy-plugin-dev-commands
     A skipped-test card keeps SUCCESS so the build can continue, but adds a
     "⚠ WARN: TESTS SKIPPED" heading in DiagnosticWarn and the dedicated warning
     message. The setup hint remains in the output. The plugin wraps the
-    existing Overseer renderer only to decorate successful skipped-test cards;
-    other cards are unchanged. A warning notification replaces the skipped
-    step's usual success notification. Set notify=false to suppress the plugin
+    existing Overseer renderer for these warnings and the parent task's
+    build-target identity; unrelated cards are unchanged. A warning notification
+    replaces the skipped step's usual success notification. Set notify=false
+    to suppress the plugin
     notification; the card warning remains visible.
 
                                                              *:OmaDevHealth*
@@ -133,8 +124,8 @@ MAPPINGS                                            *omarchy-plugin-dev-mappings
 
 Defaults exist only in QML and qmljs buffers inside detected Omarchy projects:
 
-  <C-b>            Check, deploy, and restart once
-  <C-S-b>          Test, deploy, and restart once
+  <C-b>            Check selected target and restart once
+  <C-S-b>          Check, test selected target, and restart once
   <localleader>t   Test
   <localleader>o   Dashboard
 
@@ -152,8 +143,6 @@ Call setup through a plugin manager's opts or directly. These are the defaults:
     diagnostics = {
       virtual_text = false,
     },
-    enable_auto = true,
-    enable_first_install = true,
     format_on_save = true,
     mappings = {
       enabled = true,
@@ -181,11 +170,6 @@ Call setup through a plugin manager's opts or directly. These are the defaults:
     tasks = {},
   })
 <
-enable_auto enables the plugin on every deployment. If false,
-enable_first_install enables it only when the installation did not exist.
-Set both to false to leave enabling to you. Neither option triggers a build
-when a file opens.
-
 Detected plugin QML uses four-space indentation and is formatted by qmlls
 before each save. This follows Qt's official QML Coding Conventions and the
 four-space qmlformat default:
@@ -272,15 +256,15 @@ Neovim's global diagnostic display.
 TASK OVERRIDES                                  *omarchy-plugin-dev-task-overrides*
 
 The setup option tasks contains Overseer task specifications, separate from
-the project JSON format. Built-in override names are check, test, hot_reload,
-build, and logs. Deploy and restart are internal steps; change their parent
-workflow to customize them.
+the project JSON format. Built-in override names are check, hot_reload, build,
+and logs. Tests belong in each JSON build entry, not in a global Lua override.
+Restart is an internal step; change its parent workflow to customize it.
 
 A table shallowly replaces fields of a built-in specification; nested fields
 such as strategy and components are replaced as a whole. A function receives
 { root, default, project }, where default is a copy of the built-in spec and
-project is the plugin's project module. Return the task specification to run.
-For test without a project test task, default is nil.
+project is the plugin's project module. root is the resolved destination.
+Return the task specification to run.
 
 For example, rename the check task while retaining its validation and lint
 steps: >lua
@@ -295,17 +279,103 @@ steps: >lua
 <
 A build table with cmd or strategy replaces the complete workflow. A
 build function may also provide a workflow without a configured test.
-These overrides own their check, test, deployment, and restart policy.
+These overrides own their check, test, and restart policy.
 A partial build table, such as a name change, retains the default test policy:
 run configured tests, otherwise warn and skip.
 
 Additional task names appear in the dashboard's picker. Their setup values
 may be full Overseer specs or functions receiving { root, project }. A
 project JSON task with the same custom name takes precedence over setup.
-The built-in test task instead applies its setup override to the JSON spec.
 
-All returned specs run at the detected project root and receive project
-metadata. Relative cmd executables containing a slash resolve from that root.
+Returned specs run at the selected destination and receive project metadata.
+Relative cmd executables containing a slash resolve from that directory.
+Custom strategies remain responsible for any tasks they create themselves.
+
+==============================================================================
+SOURCES                                             *omarchy-plugin-dev-sources*
+
+Build's Sources section lists the ordered builds in task-config.json. Names
+must be unique but are otherwise yours; there is no fixed number of entries.
+The shipped examples/task-config.json shows Local project, Local link, Upstream,
+and Pinned variants using keyboard-layout. Adapt its paths and repository.
+
+A minimal entry with an explicitly configured test looks like this: >json
+  {
+    "version": 2,
+    "builds": [
+      {
+        "name": "Local link",
+        "description": "Point Omarchy at this checkout without copying it",
+        "type": "symlink",
+        "source": ".",
+        "destination": "~/.config/omarchy/plugins/io.example.plugin",
+        "tasks": {
+          "test": { "command": ["./scripts/test"] }
+        }
+      }
+    ]
+  }
+<
+Use your manifest's id in the destination. Do not configure an example test
+command unless that destination actually supplies it. Omit test to warn and
+skip; use "test": false to explicitly disable it. Empty tasks objects are valid.
+JSON has no comments or trailing commas; use description for explanations.
+
+Types:
+- local-source: source and destination must resolve to the same existing folder.
+  It is never copied, created, or deleted.
+- symlink: source is an existing folder. Create the link at destination once.
+- git-clone: source is a repository URL. Clone at destination once.
+
+Filesystem paths resolve from the editor project's root, not the JSON directory
+or Neovim's current working directory. Absolute and ~/ paths also work.
+Only git-clone accepts ref, with exactly one selector:
+- "tag": "v1.2.3": an exact tag
+- "commit": "<full object id>": 40 or 64 hexadecimal characters
+- "release": "v1.2.3": a public GitHub release tag, requiring a GitHub HTTPS URL
+Without ref, clone the default branch. Releases select source, not assets.
+No downloaded build, install, or task configuration is automatically executed.
+Prepared files must pass Omarchy validation and match the project's plugin id.
+
+Selection prepares a missing destination or reuses a matching one. It does not
+fetch, pull, or reset existing checkouts. Selecting the active row changes no
+files and does not reload the shell. If a later build finds a missing or
+conflicting destination, select the entry again; builds never prepare it.
+Saved path and command changes are read on refresh, selection, and build.
+A changed path must already be ready before Build can use it.
+
+Enter opens the existing aligned confirmation popup. y/Y confirms; n/N,
+q, or Escape cancels. j/k, arrows, Tab, and Enter also work. Values wrap in full.
+Ready destinations use normal values and green status; other destinations use
+dim values and yellow status. Colors come from the theme. Destructive choices
+default to red [N]o; other choices default to green [Y]es.
+
+Replacement applies only to the occupied destination being changed:
+- Unlink a symlink without deleting its target; report that operation.
+- Ask before deleting any Git checkout, even if clean. Show actual modified,
+  untracked, and ignored file counts, plus available local commit comparisons.
+  Remote-tracking information can be stale; it does not prove publication.
+- Never delete the editor project, configured local sources, or their parents.
+- Refuse ordinary non-Git folders and Git worktrees with history stored
+  elsewhere. Move or remove those explicitly yourself.
+There are no automatic backups. Prepare the replacement first; after approved
+permanent deletion there is no rollback guarantee if the final move fails.
+
+Only the selected name is remembered under stdpath("state") in
+omarchy-plugin-dev/selections/. Paths and commands always come from the current
+project configuration; a remembered name never grants permission to delete.
+Only one row gets a star, and only when that selected folder is installed.
+A star does not prove QML runtime health or that files remain unedited.
+
+Omarchy's installed path is ~/.config/omarchy/plugins/<id>, independently of
+XDG_CONFIG_HOME. Do not put duplicate copies of an id in its scanned directory.
+Preparing that path requests a plugin rescan but preserves shell.json and enabled
+state. Enable a new plugin yourself with omarchy plugin enable <id> if needed.
+A rescan affects shell plugins broadly, not just the chosen plugin.
+
+Git clones retain .git, including tagged clones. Omarchy's own updater can
+advance them and can follow symlinks into development checkouts. These targets
+are not protected from omarchy plugin update. Only use sources you trust.
 
 ==============================================================================
 BUILD SEMANTICS                                        *omarchy-plugin-dev-build*
@@ -315,20 +385,29 @@ use an Overseer orchestrator and expose omarchy restart shell as their final
 step. This prevents QML components and IPC handlers from surviving from the
 previous plugin generation.
 
-Deployment never runs omarchy plugin update. In Git worktrees, validation and
-deployment use a staged copy of tracked and nonignored untracked files.
-Tracked files are included even if they match ignore rules; deleted files
-are omitted. Outside Git, staging applies .gitignore files as rsync filters
-and excludes .git/, .omarchy-plugin-dev/, .sublime/, .luacov, and coverage/.
+Build runs at the selected destination, not implicitly in the editor project.
+Tests, relative commands, and file discovery use that same directory. The
+editor project's configuration supplies commands; no downloaded task file is
+loaded. Build-and-restart refuses a destination that Omarchy does not use.
 
-A symlink from the installed plugin to the project is preserved, and a project
-opened directly inside its installed checkout needs no copy. Otherwise
-deployment synchronizes the validated staged copy. A separate git-managed
-installation is refused rather than modified, because doing so would dirty the
-checkout and break normal updates. A symlink to a different source is also
-refused. Synchronization uses rsync --delete, removing installed files absent
-from the staged source, including files excluded during staging. Linked and
-in-place installations keep their source files unchanged.
+Validation retains its temporary staged copy and existing file filters. In Git,
+tracked and nonignored untracked files are included; deleted files are omitted.
+Outside Git, staging applies .gitignore filters and excludes .git/,
+.omarchy-plugin-dev/, .sublime/, .luacov, and coverage/. This validates files;
+it does not deploy a copy. The obsolete copy-deployment helper was removed.
+
+The parent Overseer card shows INFO: BUILD TARGET with name, type, destination,
+resolved directory, and actual revision/dirty state. The heading uses
+DiagnosticInfo, labels are dim, and values use the normal foreground. These
+values are captured when the task is created and remain on historical cards.
+An old task cannot be replayed against changed configuration or another target;
+start a fresh task through OmaDev to resolve the current selection.
+
+A per-plugin lock covers the whole operation. Child commands retain a shared
+lease until they actually exit, including after cancellation, so a source switch
+cannot delete a checkout while a stopped task is still shutting down. Built-in
+steps recheck destination identity before running. Custom strategies own any
+additional processes they launch.
 
 ==============================================================================
 TROUBLESHOOTING                              *omarchy-plugin-dev-troubleshooting*

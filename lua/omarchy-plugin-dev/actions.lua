@@ -61,7 +61,7 @@ function M.edit_tasks(bufnr)
   if not info then
     return
   end
-  local path = require("omarchy-plugin-dev.project").existing_tasks_path(info.root)
+  local path = require("omarchy-plugin-dev.project").tasks_path(info.root)
   if vim.fn.filereadable(path) ~= 1 then
     require("omarchy-plugin-dev.messages").show(
       "Project tasks are not initialized. Run :OmaDevInit first.",
@@ -83,7 +83,7 @@ function M.init_project(bufnr, opts)
     return
   end
   local project = require("omarchy-plugin-dev.project")
-  local path = project.existing_tasks_path(info.root)
+  local path = project.tasks_path(info.root)
   local source_win = vim.api.nvim_get_current_win()
   local request = {}
   init_requests[info.root] = request

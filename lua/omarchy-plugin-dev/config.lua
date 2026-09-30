@@ -18,8 +18,6 @@ local M = {}
 ---@class OmarchyPluginDevOptions
 ---@field config_file? string
 ---@field diagnostics? false|table
----@field enable_auto? boolean
----@field enable_first_install? boolean
 ---@field executables? table<string, string>
 ---@field format_on_save? boolean
 ---@field logs? { follow?: boolean, match?: string }
@@ -40,8 +38,6 @@ local M = {}
 ---@class OmarchyPluginDevConfig
 ---@field config_file? string
 ---@field diagnostics false|table
----@field enable_auto boolean
----@field enable_first_install boolean
 ---@field executables OmarchyPluginDevExecutables
 ---@field format_on_save boolean
 ---@field logs { follow: boolean, match: string }
@@ -58,8 +54,6 @@ local defaults = {
   diagnostics = {
     virtual_text = false,
   },
-  enable_auto = true,
-  enable_first_install = true,
   executables = {
     journalctl = "journalctl",
     jq = "jq",
@@ -94,17 +88,16 @@ local defaults = {
 local values = vim.deepcopy(defaults)
 
 local function validate(opts)
+  for key in pairs(opts) do
+    if defaults[key] == nil and key ~= "config_file" and key ~= "qml_file_filter" then
+      error("omarchy-plugin-dev.nvim: unknown option " .. tostring(key))
+    end
+  end
   if opts.config_file ~= nil and (type(opts.config_file) ~= "string" or opts.config_file == "") then
     error("omarchy-plugin-dev.nvim: config_file must be a non-empty path")
   end
   if opts.diagnostics ~= false and type(opts.diagnostics) ~= "table" then
     error("omarchy-plugin-dev.nvim: diagnostics must be a table or false")
-  end
-  if type(opts.enable_auto) ~= "boolean" then
-    error("omarchy-plugin-dev.nvim: enable_auto must be a boolean")
-  end
-  if type(opts.enable_first_install) ~= "boolean" then
-    error("omarchy-plugin-dev.nvim: enable_first_install must be a boolean")
   end
   if type(opts.format_on_save) ~= "boolean" then
     error("omarchy-plugin-dev.nvim: format_on_save must be a boolean")
@@ -170,6 +163,9 @@ local function validate(opts)
   end
   if type(opts.tasks) ~= "table" then
     error("omarchy-plugin-dev.nvim: tasks must be a table")
+  end
+  if opts.tasks.test ~= nil then
+    error("omarchy-plugin-dev.nvim: configure tests per build in task-config.json")
   end
   for name, task in pairs(opts.tasks) do
     if

@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "name": "Local project",
+      "description": "Build this checkout in place; Omarchy must already point here.",
+      "type": "local-source",
+      "source": ".",
+      "destination": ".",
+      "tasks": {}
+    },
+    {
+      "name": "Local link",
+      "description": "Link Omarchy to this checkout once, without copying files.",
+      "type": "symlink",
+      "source": ".",
+      "destination": "~/.config/omarchy/plugins/io.github.ilyazar.keyboard-layout",
+      "tasks": {}
+    },
+    {
+      "name": "Upstream",
+      "description": "Clone the default branch once; tests explicitly disabled.",
+      "type": "git-clone",
+      "source": "https://github.com/omarchy-QOL/omarchy-keyboard-layout.git",
+      "destination": "~/.config/omarchy/plugins/io.github.ilyazar.keyboard-layout",
+      "tasks": { "test": false }
+    },
+    {
+      "name": "Pinned v0.2.2",
+      "description": "Clone this tag; keep Git history; tests explicitly disabled.",
+      "type": "git-clone",
+      "source": "https://github.com/omarchy-QOL/omarchy-keyboard-layout.git",
+      "destination": "~/.config/omarchy/plugins/io.github.ilyazar.keyboard-layout",
+      "ref": { "tag": "v0.2.2" },
+      "tasks": { "test": false }
+    }
+  ]
+}

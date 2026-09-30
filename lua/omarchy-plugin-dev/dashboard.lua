@@ -2,8 +2,8 @@ local M = {}
 
 M.tabs = { "Build", "Status", "Settings" }
 M.actions = {
-  { "h", "Build and restart", "hot_reload", "Check, deploy, then restart the shell" },
-  { "b", "Test, build, restart", "build", "Check, test, deploy, then restart the shell" },
+  { "h", "Build and restart", "hot_reload", "Check the selected target, then restart" },
+  { "b", "Test, build, restart", "build", "Check, test the selected target, then restart" },
   { "t", "Test", "test", "Run the configured project test" },
   { "v", "Health", "health", "Run the plugin's health check" },
   { "p", "Project tasks", "tasks", "Choose a project task to run" },
@@ -35,9 +35,10 @@ function M.collect(bufnr)
     info = info,
     options = options,
     config_path = config.user_config_path(),
-    tasks_path = project.existing_tasks_path(info.root),
+    tasks_path = project.tasks_path(info.root),
     validation = { state = "checking" },
     tools = {},
+    sources = require("omarchy-plugin-dev.sources").snapshot(info),
   }
   local function add(label, value, detail, kind)
     snapshot.tools[#snapshot.tools + 1] = { label, value, kind or value, detail }
@@ -52,10 +53,19 @@ function M.collect(bufnr)
   add("rsync", executable_status(options.executables.rsync))
   local logs_state, logs_path = executable_status(options.executables.journalctl)
   add("logs", logs_state, logs_path .. " (" .. options.logs.match .. ")")
-  local test = project.test_state(info.root)
+  local context = snapshot.sources.context
+  snapshot.build_root = context and context.root or nil
+  if not context then
+    snapshot.validation =
+      { state = "unavailable", detail = snapshot.sources.error or "Select a build target" }
+  end
+  local test = context and project.test_state(context.root, context.entry.tasks)
+    or { kind = "unavailable", label = snapshot.sources.error or "Select a build target" }
+  test.tasks_exists = vim.uv.fs_stat(snapshot.tasks_path) ~= nil
   local test_label, test_detail = test.label:match("^(.-) %- (.*)$")
   local invalid = test.kind == "invalid"
-  local tasks_state = test.tasks_exists and (invalid and "invalid" or "valid") or "not initialized"
+  local tasks_state = test.tasks_exists and (project.load_tasks(info.root) and "valid" or "invalid")
+    or "not initialized"
   add("project tasks", tasks_state, invalid and test_detail or nil)
   add("test task", test_label or test.label, test_detail, test.kind)
   return snapshot
@@ -123,7 +133,8 @@ local function status_rows(snapshot, width)
   local validation = snapshot.validation
   local rows = {
     section("Project", width),
-    field("root", snapshot.info.root),
+    field("editor project", snapshot.info.root),
+    field("build destination", snapshot.build_root or "not selected"),
     manifest_row,
     field(
       "official validation",
@@ -138,6 +149,57 @@ local function status_rows(snapshot, width)
     rows[#rows + 1] = field(tool[1], tool[2], status_group(tool[3]), tool[4])
   end
   align_details(rows)
+  return rows
+end
+
+local function middle(text, width)
+  if vim.fn.strdisplaywidth(text) <= width then
+    return text
+  end
+  local side = math.max(1, math.floor((width - 3) / 2))
+  local count = vim.fn.strchars(text)
+  local first, last = "", ""
+  for index = 0, count - 1 do
+    local char = vim.fn.strcharpart(text, index, 1)
+    if vim.fn.strdisplaywidth(first .. char) > side then
+      break
+    end
+    first = first .. char
+  end
+  for index = count - 1, 0, -1 do
+    local char = vim.fn.strcharpart(text, index, 1)
+    if vim.fn.strdisplaywidth(char .. last) > side then
+      break
+    end
+    last = char .. last
+  end
+  return first .. "..." .. last
+end
+
+local function source_rows(snapshot, width)
+  local rows = { {}, section("Sources", width) }
+  local label_width = 12
+  for _, entry in ipairs(snapshot.sources.entries) do
+    label_width = math.max(label_width, vim.fn.strdisplaywidth(entry.label) + 2)
+  end
+  label_width = math.min(label_width, math.floor(width / 2))
+  for _, entry in ipairs(snapshot.sources.entries) do
+    rows[#rows + 1] = {
+      action = { target = entry.name },
+      { entry.active and "  * " or "    ", "DiagnosticOk" },
+      { column(middle(entry.label, label_width - 2), label_width), "Normal" },
+      {
+        middle(entry.detail, math.max(7, width - label_width - 6)),
+        entry.active and "Normal" or "Comment",
+      },
+    }
+  end
+  rows[#rows + 1] = {
+    {
+      "    " .. snapshot.sources.detail,
+      snapshot.sources.error and "DiagnosticError" or "Comment",
+    },
+  }
   return rows
 end
 
@@ -162,6 +224,7 @@ local function build_rows(snapshot, width)
       { detail, "Comment" },
     }
   end
+  vim.list_extend(rows, source_rows(snapshot, width))
   return rows
 end
 

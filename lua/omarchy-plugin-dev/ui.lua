@@ -150,8 +150,11 @@ local function refresh(state)
   end
   state.snapshot = snapshot
   render(state)
+  if not snapshot.build_root then
+    return true
+  end
   require("omarchy-plugin-dev.project").external_validate_async(
-    snapshot.info.root,
+    snapshot.build_root,
     function(valid, detail)
       if
         state.snapshot ~= snapshot
@@ -215,6 +218,17 @@ local function bind_keys(state)
     })
   end
   local function activate(method)
+    if type(method) == "table" then
+      local snapshot = state.snapshot
+      require("omarchy-plugin-dev.sources").choose(snapshot.info, method.target, function()
+        if vim.api.nvim_win_is_valid(state.win) then
+          refresh(state)
+        end
+      end, function()
+        return vim.api.nvim_win_is_valid(state.win) and state.snapshot == snapshot
+      end)
+      return
+    end
     close(state)
     require("omarchy-plugin-dev.actions")[method](state.source_buf)
   end

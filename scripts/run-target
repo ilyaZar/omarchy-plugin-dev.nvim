@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/operation-lock.sh"
+[[ $# -ge 8 ]] || { printf 'Missing target context or command\n' >&2; exit 2; }
+id=$1 destination=$2 root=$3 identity=$4 root_identity=$5 installed=$6 revision=$7
+shift 7
+omadev_worker_lock "$id" || { printf 'A source replacement is running\n' >&2; exit 1; }
+if [[ $(stat -c '%d:%i' -- "$destination") != "$identity" \
+  || $(realpath -e -- "$destination") != "$root" \
+  || $(stat -c '%d:%i' -- "$root") != "$root_identity" ]]; then
+  printf 'Build destination changed; start a new build\n' >&2
+  exit 1
+fi
+if [[ $installed == true && $(realpath -e -- "$HOME/.config/omarchy/plugins/$id") != "$root" ]]; then
+  printf 'This destination is not currently installed\n' >&2
+  exit 1
+fi
+"${OMARCHY_PLUGIN_DEV_JQ:-jq}" -e --arg id "$id" '.schemaVersion == 1 and .id == $id' "$root/manifest.json" >/dev/null \
+  || { printf 'Destination manifest changed\n' >&2; exit 1; }
+if [[ -n $revision && $(git -C "$root" rev-parse HEAD) != "$revision" ]]; then
+  printf 'Checkout revision changed; start a new build\n' >&2
+  exit 1
+fi
+cd -- "$root"
+exec "$@"
