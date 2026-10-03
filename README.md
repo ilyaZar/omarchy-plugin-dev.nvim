@@ -70,9 +70,10 @@ directory to `.gitignore`. Choose a test runner when offered, or
 configure tests later. Initialization does not install the plugin or run tests.
 
 In `:OmaDev`, select **Local link** to point Omarchy at your checkout.
-Use **Local project** if Omarchy already uses it. `<C-b>` checks and restarts;
-`<C-S-b>` also runs that target's tests. Builds never clone, relink, or copy
-files; preparation happens only when you select a target.
+Use **Local project** only if Omarchy already uses it; otherwise build and
+restart directs you to **Local link**. `<C-b>` checks and restarts; `<C-S-b>`
+also runs that target's tests. Builds never clone, relink, or copy files;
+preparation happens only when you select a target.
 
 Open `:OmaDev` for **Build**, **Status**, and **Settings**. Press `r` to refresh
 project/tool information and rerun validation, or `p` to choose built-in tasks,
@@ -129,13 +130,16 @@ folder. The editor project's configuration supplies commands; downloaded task
 files are never loaded. Switching cannot interrupt an active build.
 
 A matching destination is reused without fetching or resetting. Selecting the
-active row changes nothing. Replacing a Git checkout requires confirmation,
-including when clean, and permanently deletes it without a backup. A link is
-removed without deleting its target. Local sources are never deleted.
+active row changes nothing. Replacing a recognized copied installation or Git
+checkout requires confirmation and permanently deletes it without a backup.
+Git replacement is refused while linked worktrees depend on its metadata. A
+link is removed without deleting its target. Local sources are never deleted.
 
-Selection preserves enabled state and settings; enable a new plugin explicitly
-with `omarchy plugin enable <id>`. Omarchy's updater can modify linked checkouts
-and tagged Git clones: they are not update-proof.
+Selection preserves external Omarchy settings and enabled state. Files stored
+inside a replaced destination, including plugin-local settings, are deleted.
+Enable a new plugin explicitly with `omarchy plugin enable <id>`. Omarchy's
+updater can modify linked checkouts and tagged Git clones: they are not
+update-proof.
 
 ## Configuration
 

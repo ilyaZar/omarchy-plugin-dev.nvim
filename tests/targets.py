@@ -204,6 +204,15 @@ try:
     run("git", "-C", root, "worktree", "add", "--detach", worktree)
     assert inspect(request(dest=worktree), good=False).returncode != 0
     assert inspect(request("local-source", source=str(worktree), dest=worktree))["operation"] == "reuse"
+    external = base / "external-worktree"
+    run("git", "-C", destination, "worktree", "add", "--detach", external)
+    shared = request()
+    shared["protected"].append(str(external))
+    shared_result = inspect(shared, good=False)
+    assert shared_result.returncode != 0
+    assert "linked Git worktrees" in shared_result.stderr
+    assert run("git", "-C", external, "status", "--porcelain").returncode == 0
+    run("git", "-C", destination, "worktree", "remove", "--force", external)
     bad = request("git-clone", url, ref={"tag": "does-not-exist"})
     inode = destination.stat().st_ino
     assert prepare(bad, approve=True, good=False).returncode != 0
@@ -227,9 +236,39 @@ try:
     assert broken.resolve() == root
     ordinary = base / "ordinary"
     ordinary.mkdir()
+    unrelated_manifest = manifest | {"id": "io.test.unrelated"}
+    (ordinary / "manifest.json").write_text(json.dumps(unrelated_manifest))
     (ordinary / "keep").write_text("keep")
     assert inspect(request(dest=ordinary), good=False).returncode != 0
     assert (ordinary / "keep").exists()
+
+    protected_copy = base / "protected-copy"
+    protected_copy.mkdir()
+    (protected_copy / "manifest.json").write_text(json.dumps(manifest))
+    (protected_copy / "Main.qml").write_text("copy\n")
+    protected_request = request(dest=protected_copy)
+    protected_request["protected"].append(str(protected_copy))
+    assert inspect(protected_request, good=False).returncode != 0
+    assert (protected_copy / "Main.qml").read_text() == "copy\n"
+
+    installed = base / "installed-copy"
+    installed.mkdir()
+    (installed / "manifest.json").write_text(json.dumps(manifest))
+    (installed / "Main.qml").write_text("installed copy\n")
+    replacement = request(dest=installed)
+    report = inspect(replacement)
+    assert report["kind"] == "installed-copy" and report["destructive"] is True
+    declined = prepare(replacement, good=False)
+    assert declined.returncode != 0
+    assert "explicit approval" in declined.stderr
+    assert (installed / "Main.qml").read_text() == "installed copy\n"
+    stale_copy = replacement | {"expected": report, "delete_approved": True}
+    (installed / "Main.qml").write_text("changed after confirmation\n")
+    assert run(repo / "scripts/prepare-target", "prepare", json.dumps(stale_copy), good=False).returncode != 0
+    assert (installed / "Main.qml").read_text() == "changed after confirmation\n"
+    prepare(replacement, approve=True)
+    assert installed.is_symlink() and installed.resolve() == root
+
     stale_config = request(dest=base / "new-link")
     stale_config["expected"] = inspect(stale_config)
     config.write_text(config.read_text() + " ")
@@ -259,6 +298,17 @@ exec /usr/bin/mv "$@"
     assert prepare(request(dest=collision), good=False).returncode != 0
     assert (collision / "foreign").read_text() == "keep"
     mv.unlink()
+
+    failed = base / "failed-replacement"
+    failed.mkdir()
+    (failed / "manifest.json").write_text(json.dumps(manifest))
+    (failed / "Main.qml").write_text("no backup\n")
+    mv = executable("mv", "exit 1\n")
+    failure = prepare(request(dest=failed), approve=True, good=False)
+    assert failure.returncode != 0 and "destination may be empty" in failure.stderr
+    assert not failed.exists()
+    mv.unlink()
+
     native = base / "native-link"
     prepare(request(dest=native))
     assert native.is_symlink() and native.resolve() == root

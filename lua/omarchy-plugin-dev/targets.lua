@@ -153,6 +153,10 @@ function M.context(request, report, installed)
   end
   local native = vim.fs.joinpath(vim.env.HOME, ".config", "omarchy", "plugins", request.id)
   if installed and vim.uv.fs_realpath(native) ~= info.root then
+    if request.entry.type == "local-source" then
+      return nil,
+        'Local project does not install this checkout. Select a symlink target such as "Local link" in :OmaDev.'
+    end
     return nil, "This destination is not currently installed: " .. request.entry.destination
   end
   return {

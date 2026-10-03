@@ -1279,6 +1279,11 @@ config.setup({
   executables = { qml_language_server = "definitely-missing-qml-language-server" },
 })
 assert(targets.remember(project.canonical(root), "Local project"))
+local _, local_project_error = targets.resolve(project.canonical(root), true)
+assert(
+  local_project_error and local_project_error:find('"Local link"', 1, true),
+  "Local project installation failure does not direct users to Local link"
+)
 local check_task = assert(tasks.check(project.canonical(root)))
 assert(check_task.starts == 1, "check task did not start")
 assert(check_task.spec.cwd == project.canonical(root), "visible check task has the wrong root")
@@ -1373,6 +1378,7 @@ config.setup = base_config_setup
 dofile("tests/dashboard_height.lua")
 dofile("tests/dashboard.lua")
 dofile("tests/dashboard_refresh.lua")
+dofile("tests/sources.lua")
 dofile("tests/manifest_inspection.lua")
 dofile("tests/configuration.lua")
 dofile("tests/initialization.lua")

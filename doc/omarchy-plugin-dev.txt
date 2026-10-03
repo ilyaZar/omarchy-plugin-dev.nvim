@@ -325,7 +325,8 @@ JSON has no comments or trailing commas; use description for explanations.
 
 Types:
 - local-source: source and destination must resolve to the same existing folder.
-  It is never copied, created, or deleted.
+  It is never copied, created, or deleted. If Omarchy uses another copy, build
+  and restart refuses to continue and directs you to Local link.
 - symlink: source is an existing folder. Create the link at destination once.
 - git-clone: source is a repository URL. Clone at destination once.
 
@@ -354,12 +355,14 @@ default to red [N]o; other choices default to green [Y]es.
 
 Replacement applies only to the occupied destination being changed:
 - Unlink a symlink without deleting its target; report that operation.
-- Ask before deleting any Git checkout, even if clean. Show actual modified,
-  untracked, and ignored file counts, plus available local commit comparisons.
-  Remote-tracking information can be stale; it does not prove publication.
+- Ask before deleting a copied installation with the same plugin id or any Git
+  checkout, even if clean. State that every file inside is permanently deleted
+  without a backup. For Git, show actual modified, untracked, and ignored file
+  counts, plus available local commit comparisons. Remote-tracking information
+  can be stale; it does not prove publication.
 - Never delete the editor project, configured local sources, or their parents.
-- Refuse ordinary non-Git folders and Git worktrees with history stored
-  elsewhere. Move or remove those explicitly yourself.
+- Refuse unrelated folders, linked worktrees, and main Git checkouts whose
+  metadata is still required by linked worktrees elsewhere.
 There are no automatic backups. Prepare the replacement first; after approved
 permanent deletion there is no rollback guarantee if the final move fails.
 
@@ -371,9 +374,11 @@ A star does not prove QML runtime health or that files remain unedited.
 
 Omarchy's installed path is ~/.config/omarchy/plugins/<id>, independently of
 XDG_CONFIG_HOME. Do not put duplicate copies of an id in its scanned directory.
-Preparing that path requests a plugin rescan but preserves shell.json and enabled
-state. Enable a new plugin yourself with omarchy plugin enable <id> if needed.
-A rescan affects shell plugins broadly, not just the chosen plugin.
+Preparing that path requests a plugin rescan but preserves external shell.json
+settings and enabled state. Files stored inside a replaced destination,
+including plugin-local settings, are deleted. Enable a new plugin yourself with
+omarchy plugin enable <id> if needed. A rescan affects shell plugins broadly,
+not just the chosen plugin.
 
 Git clones retain .git, including tagged clones. Omarchy's own updater can
 advance them and can follow symlinks into development checkouts. These targets

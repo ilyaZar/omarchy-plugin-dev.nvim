@@ -44,12 +44,12 @@ end
 
 local function confirmation(request, report)
   local entry = request.entry
-  local destructive = report.operation == "replace" and report.kind == "git-clone"
+  local destructive = report.destructive == true
   local fields = {
     { "Plugin", request.id },
     { "Name", entry.name },
     { "Type", entry.type },
-    { "Source", entry.source },
+    { "Proposed source", entry.source },
     { "Destination", entry.destination },
     { "Current", report.kind .. " (" .. report.operation .. ")", status = true },
   }
@@ -65,19 +65,26 @@ local function confirmation(request, report)
   if report.operation == "reuse" then
     notes[#notes + 1] = "Reuse this destination. No files, links, or checkouts will be changed."
   elseif destructive then
-    notes[#notes + 1] = string.format(
-      "%d modified files, %d untracked files, %d ignored files.",
-      report.modified,
-      report.untracked,
-      report.ignored
-    )
-    notes[#notes + 1] = "Commits ahead: "
-      .. report.ahead
-      .. "; comparison: "
-      .. report.comparison
-      .. " (local information, possibly stale)."
+    if report.kind == "git-clone" then
+      notes[#notes + 1] = string.format(
+        "%d modified files, %d untracked files, %d ignored files.",
+        report.modified,
+        report.untracked,
+        report.ignored
+      )
+      notes[#notes + 1] = "Commits ahead: "
+        .. report.ahead
+        .. "; comparison: "
+        .. report.comparison
+        .. " (local information, possibly stale)."
+      notes[#notes + 1] =
+        "Permanently delete this directory and its Git history. No backup or rollback."
+    else
+      notes[#notes + 1] =
+        "Permanently delete this installed directory and every file inside it. No backup or rollback."
+    end
     notes[#notes + 1] =
-      "Permanently delete this directory and its Git history. No backup or rollback."
+      "Plugin-local settings or other files inside the destination will be deleted."
   elseif report.kind == "symlink" then
     notes[#notes + 1] = "Replace only the symlink, never its target folder."
   else
@@ -87,7 +94,8 @@ local function confirmation(request, report)
     notes[#notes + 1] =
       "Omarchy updates may change this checkout, including a linked source or tagged clone."
   end
-  notes[#notes + 1] = "Preserve plugin settings and enabled state. Only use sources you trust."
+  notes[#notes + 1] =
+    "External Omarchy shell settings and enabled state are preserved. Only use sources you trust."
   return {
     fields = fields,
     info = notes,
@@ -98,7 +106,7 @@ end
 
 local function prepare(request, report, done)
   request.expected = report
-  request.delete_approved = report.operation == "replace" and report.kind == "git-clone"
+  request.delete_approved = report.destructive == true
   local function finish(result)
     local output =
       vim.trim(((result.stdout or "") .. (result.stderr or "")):gsub("\27%[[%d;]*m", ""))

@@ -48,8 +48,9 @@ if [[ $action == inspect ]]; then report; exit 0; fi
 [[ $operation == "$("$JQ" -er '.expected.operation' <<<"$request")" ]] \
   || fail 'Destination no longer matches the confirmed operation'
 if [[ $operation == reuse ]]; then printf 'Reusing %s; no files changed\n' "$target"; exit 0; fi
-if [[ $kind == git-clone ]]; then
-  [[ $("$JQ" -r '.delete_approved // false' <<<"$request") == true ]] || fail 'Deleting a checkout requires explicit approval'
+if [[ $destructive == true ]]; then
+  [[ $("$JQ" -r '.delete_approved // false' <<<"$request") == true ]] \
+    || fail 'Deleting the existing installation requires explicit approval'
 fi
 
 checkout_reference() {
@@ -103,9 +104,9 @@ if [[ -L $target ]]; then
   rm -- "$target"
   printf 'Removed only the old symlink: %s\n' "$target"
 elif [[ -e $target ]]; then
+  current_kind=$(existing_directory_kind)
+  [[ $current_kind == "$kind" ]] || fail 'Destination type changed while preparing the replacement'
   protect_sources
-  ordinary_checkout || fail 'Destination is no longer a self-contained Git checkout'
-  [[ $kind == git-clone ]] || fail 'Destination type changed'
   rm -rf --one-file-system -- "$target"
 fi
 mv -T --no-clobber -- "$candidate" "$target" \

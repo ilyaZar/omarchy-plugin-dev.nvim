@@ -27,6 +27,18 @@ ordinary_checkout() {
   [[ $(git_read rev-parse --path-format=absolute --git-common-dir) == "$(realpath -e -- "$target/.git")" ]]
 }
 
+existing_directory_kind() {
+  if ordinary_checkout 2>/dev/null; then
+    printf git-clone
+  elif [[ -e $target/.git || -L $target/.git ]]; then
+    fail "Refusing to replace a Git checkout with shared or external metadata: $target"
+  elif valid_manifest "$target"; then
+    printf installed-copy
+  else
+    fail "Destination is not a recognized installation of $id: $target"
+  fi
+}
+
 matching_checkout() {
   ordinary_checkout || return 1
   [[ $(git_read config --get remote.origin.url) == "$source" ]] || return 1
@@ -44,17 +56,24 @@ matching_checkout() {
 }
 
 protect_sources() {
-  local path resolved mounts
+  local path resolved mounts linked
   [[ $target != / && $target != "$HOME" ]] || fail "Refusing to replace $target"
   mounts=$(findmnt --json --list --output TARGET) || fail 'Cannot check mounted folders before deletion'
   while IFS= read -r path; do
-    [[ $path != "$target" && $path != "$target/"* ]] || fail "Unmount $path before replacing this checkout"
+    [[ $path != "$target" && $path != "$target/"* ]] || fail "Unmount $path before replacing this directory"
   done < <("$JQ" -r '.filesystems[].target' <<<"$mounts")
   while IFS= read -r path; do
     resolved=$(realpath -m -- "$path")
     [[ $resolved != "$target" && $resolved != "$target/"* ]] \
       || fail "Move the development source before replacing $target (protected: $resolved)"
   done < <({ printf '%s\n' "$root" "$SCRIPT_DIR/.."; "$JQ" -r '.protected[]' <<<"$request"; })
+  if [[ $kind == git-clone && -e $target/.git/worktrees ]]; then
+    [[ -d $target/.git/worktrees ]] || fail 'Cannot inspect linked Git worktree metadata'
+    linked=$(find "$target/.git/worktrees" -mindepth 1 -maxdepth 1 -print -quit) \
+      || fail 'Cannot inspect linked Git worktree metadata'
+    [[ -z $linked ]] \
+      || fail "Remove or prune linked Git worktrees before replacing their main checkout: $target"
+  fi
 }
 
 inspect_target() {
@@ -78,10 +97,11 @@ inspect_target() {
     if [[ $type == symlink && $(realpath -e -- "$target" 2>/dev/null || true) == "$source" ]]; then operation=reuse; fi
   elif [[ -e $target ]]; then
     [[ -d $target ]] || fail "Destination is not a directory: $target"
-    ordinary_checkout || fail "Move this folder yourself; it is not a self-contained Git checkout: $target"
-    kind=git-clone
+    kind=$(existing_directory_kind)
     operation=replace
-    if [[ $type == git-clone ]] && matching_checkout && valid_manifest "$target"; then operation=reuse; fi
+    if [[ $kind == git-clone && $type == git-clone ]] && matching_checkout && valid_manifest "$target"; then
+      operation=reuse
+    fi
     if [[ $operation == replace ]]; then protect_sources; fi
   fi
   if [[ $type == symlink && $operation != reuse ]]; then
@@ -97,10 +117,18 @@ inspect_target() {
       [[ -z $changes ]] || dirty=true
     fi
   fi
+  destructive=false
+  if [[ $operation == replace && ( $kind == git-clone || $kind == installed-copy ) ]]; then
+    destructive=true
+  fi
 }
 
 replacement_summary() {
   modified=0 untracked=0 ignored=0 ahead=unknown comparison=unknown
+  destructive=false
+  if [[ $operation == replace && ( $kind == git-clone || $kind == installed-copy ) ]]; then
+    destructive=true
+  fi
   [[ $kind == git-clone && $operation == replace ]] || return 0
   local changes line
   changes=$(git_read status --porcelain=v1 --untracked-files=all --ignored) || fail 'Cannot inspect files before deletion'
@@ -125,7 +153,9 @@ report() {
     --arg fingerprint "$digest" --arg revision "$revision" --argjson dirty "$dirty" \
     --arg target "$target" --arg branch "$branch" --argjson modified "$modified" --argjson untracked "$untracked" \
     --argjson ignored "$ignored" --arg ahead "$ahead" --arg comparison "$comparison" \
+    --argjson destructive "$destructive" \
     '{operation:$operation,kind:$kind,identity:$identity,fingerprint:$fingerprint,
       revision:$revision,branch:$branch,dirty:$dirty,target:$target,modified:$modified,
-      untracked:$untracked,ignored:$ignored,ahead:$ahead,comparison:$comparison}'
+      untracked:$untracked,ignored:$ignored,ahead:$ahead,comparison:$comparison,
+      destructive:$destructive}'
 }
