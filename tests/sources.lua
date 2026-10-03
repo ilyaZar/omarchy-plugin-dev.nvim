@@ -91,6 +91,7 @@ local answer
 local buf, win = confirm.open(captured.title, captured.context, function(value)
   answer = value
 end)
+assert(buf and win, "confirmation did not open")
 assert(
   vim.api.nvim_win_get_cursor(win)[1] == vim.api.nvim_buf_line_count(buf),
   "No is not selected"
